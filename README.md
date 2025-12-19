@@ -43,80 +43,19 @@ The `app.js` file is currently **manually obfuscated** using:
 - Minified single-line functions
 - Compact code structure
 
-### Development Workflow
+### Obfuscated Symbol Meanings (Development Reference)
 
-**Option 1: Maintain Separate Development File (Recommended)**
+**app.js symbols:**
+- `_0x` - String array containing Firebase config parts
+- `_c` - Firebase configuration object (assembled from `_0x`)
+- `_d` - Firestore database instance
+- `_a` - Firebase authentication instance
+- `_u` - Current authenticated user object
+- `_e` - DOM elements object (auth, main, signin, signout, email, sections, assignments, etc.)
+- `_i()` - Initialize app (load sections and assignments)
+- `_ls()` - Load sections from Firestore
+- `_la()` - Load teacher assignments from Firestore
+- `_as()` - Assign teacher to section
+- `_ea(id, email)` - Edit assignment (id = assignment doc ID, email = current email)
+- `_da(id)` - Delete assignment (id = assignment doc ID)
 
-1. **Create unobfuscated version**: Save readable code as `app.dev.js`
-   - Use descriptive variable names (e.g., `firebaseConfig`, `db`, `auth`, `currentUser`)
-   - Add comments and proper formatting
-   - Keep Firebase config in plain object format
-
-2. **During development**:
-   - Edit `app.dev.js` with readable code
-   - Update `index.html` temporarily to use `app.dev.js`:
-     ```html
-     <script src="app.dev.js"></script>
-     ```
-   - Test all functionality
-
-3. **Before deployment**:
-   - Manually obfuscate or use tools (see below)
-   - Update `index.html` back to `app.js`
-   - Test obfuscated version
-
-**Option 2: Use Git Branches**
-
-```bash
-# Development branch - readable code
-git checkout -b development
-# Keep app.js readable with full variable names
-
-# Production branch - obfuscated code
-git checkout main
-# Contains obfuscated app.js
-```
-
-### Obfuscation Methods
-
-**Manual Obfuscation (Current Method)**
-- Rename variables to short names (`_0x`, `_c`, `_db`, `_el`)
-- Split Firebase config into string arrays
-- Remove whitespace and comments
-- Combine statements on single lines
-
-**Automated Obfuscation Tools**
-
-1. **JavaScript Obfuscator (Online)**: https://obfuscator.io/
-   - Paste your readable code
-   - Settings: String Array Encoding, Control Flow Flattening
-   - Copy output to `app.js`
-
-2. **JavaScript Obfuscator (CLI)**:
-   ```bash
-   npm install -g javascript-obfuscator
-   javascript-obfuscator app.dev.js --output app.js \
-     --compact true \
-     --control-flow-flattening true \
-     --string-array true
-   ```
-
-3. **Terser (Minification)**:
-   ```bash
-   npm install -g terser
-   terser app.dev.js -o app.js --compress --mangle
-   ```
-
-### Unobfuscating for Development
-
-**To work on existing obfuscated code:**
-
-1. **Restore from backup**: If you have `app.dev.js`, use that
-2. **Manual deobfuscation**: 
-   - Expand variable names to meaningful ones
-   - Add proper indentation and line breaks
-   - Add comments explaining logic
-   - Reconstruct Firebase config object
-3. **Use version control**: Check out development branch with readable code
-
-**Important**: Never edit `app.js` directly if it's obfuscated. Always maintain a readable version for development.
