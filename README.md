@@ -43,19 +43,19 @@ The `app.js` file is currently **manually obfuscated** using:
 - Minified single-line functions
 - Compact code structure
 
-### Obfuscated Symbol Meanings (Development Reference)
+### Unobfuscated Symbol (Development Reference)
 
 **app.js symbols:**
-- `_0x` - String array containing Firebase config parts
-- `_c` - Firebase configuration object (assembled from `_0x`)
-- `_d` - Firestore database instance
-- `_a` - Firebase authentication instance
-- `_u` - Current authenticated user object
-- `_e` - DOM elements object (auth, main, signin, signout, email, sections, assignments, etc.)
-- `_i()` - Initialize app (load sections and assignments)
-- `_ls()` - Load sections from Firestore
-- `_la()` - Load teacher assignments from Firestore
-- `_as()` - Assign teacher to section
-- `_ea(id, email)` - Edit assignment (id = assignment doc ID, email = current email)
-- `_da(id)` - Delete assignment (id = assignment doc ID)
+- `_0x` → `firebaseConfigParts` - String array containing Firebase config parts
+- `_c` → `firebaseConfig` - Firebase configuration object
+- `_d` → `db` or `firestore` - Firestore database instance
+- `_a` → `auth` - Firebase authentication instance
+- `_u` → `currentUser` - Current authenticated user object
+- `_e` → `elements` - DOM elements object (auth, main, signin, signout, email, sections, assignments, etc.)
+- `_i()` → `initializeApp()` - Initialize app (load sections and assignments)
+- `_ls()` → `loadSections()` - Load sections from Firestore
+- `_la()` → `loadAssignments()` - Load teacher assignments from Firestore
+- `_as()` → `assignTeacher()` - Assign teacher to section
+- `_ea(id, email)` → `editAssignment(assignmentId, currentEmail)` - Edit assignment
+- `_da(id)` → `deleteAssignment(assignmentId)` - Delete assignment
 
