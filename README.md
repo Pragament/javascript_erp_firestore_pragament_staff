@@ -1,61 +1,145 @@
-# School Admin Portal
+# School Admin App - Code Obfuscation
 
-## Overview
-Web application for school administrators to assign teachers to sections.
+## Quick Start
 
-## Features
-- Google Sign-In authentication
-- View all sections from Firestore (populated by Python Flask app)
-- Assign teachers to sections using their Google email
-- View all teacher assignments
-- Edit teacher email for a section
-- Remove teacher assignments
+### 1. Edit Source Code
 
-## Setup
-1. Open `index.html` in a web browser
-2. Sign in with Google
-3. Select a section and enter teacher's email
-4. Click "Assign Teacher"
-
-## Firebase Collections Used
-- `schools` - Contains school data with sections array
-- `teacherAssignments` - Stores teacher-section mappings
-
-## Data Structure
-```javascript
-// teacherAssignments collection
-{
-  sectionId: "section123",
-  sectionName: "Class 10-A",
-  teacherEmail: "teacher@school.com",
-  schoolId: "school456",
-  assignedAt: timestamp,
-  assignedBy: "admin@school.com"
-}
+```bash
+# Edit the readable source file
+vim app.js
 ```
 
-## Code Obfuscation
+### 2. Run Obfuscation
 
-### Current State
-The `app.js` file is currently **manually obfuscated** using:
-- Shortened variable names (`_0x`, `_c`, `_d`, `_a`, `_u`, `_e`, etc.)
-- String array obfuscation for Firebase configuration
-- Minified single-line functions
-- Compact code structure
+**Windows:**
 
-### Unobfuscated Symbol (Development Reference)
+```cmd
+obfuscate.bat simple
+```
 
-**app.js symbols:**
-- `_0x` → `firebaseConfigParts` - String array containing Firebase config parts
-- `_c` → `firebaseConfig` - Firebase configuration object
-- `_d` → `db` or `firestore` - Firestore database instance
-- `_a` → `auth` - Firebase authentication instance
-- `_u` → `currentUser` - Current authenticated user object
-- `_e` → `elements` - DOM elements object (auth, main, signin, signout, email, sections, assignments, etc.)
-- `_i()` → `initializeApp()` - Initialize app (load sections and assignments)
-- `_ls()` → `loadSections()` - Load sections from Firestore
-- `_la()` → `loadAssignments()` - Load teacher assignments from Firestore
-- `_as()` → `assignTeacher()` - Assign teacher to section
-- `_ea(id, email)` → `editAssignment(assignmentId, currentEmail)` - Edit assignment
-- `_da(id)` → `deleteAssignment(assignmentId)` - Delete assignment
+**Linux/Mac:**
 
+```bash
+chmod +x obfuscate.sh
+./obfuscate.sh simple
+```
+
+### 3. Deploy
+
+```bash
+# Copy obfuscated file to public repo
+cp app.obfuscated.js ../public-repo/javascript_erp_firestore_schooladmin/
+```
+
+## Files
+
+| File                | Purpose                      | Location          |
+| ------------------- | ---------------------------- | ----------------- |
+| `app.js`            | Readable source code         | Private repo only |
+| `app.obfuscated.js` | Obfuscated code              | Public repo       |
+| `obfuscate.bat`     | Windows obfuscation script   | Both repos        |
+| `obfuscate.sh`      | Linux/Mac obfuscation script | Both repos        |
+
+## Obfuscation Command
+
+### Simple Mode (No Dependencies)
+
+```bash
+# Windows
+./obfuscate.bat simple
+
+# Linux/Mac
+./obfuscate.sh simple
+```
+
+### Full Mode (Requires javascript-obfuscator)
+
+```bash
+# Install first
+npm install -g javascript-obfuscator
+
+# Then run
+./obfuscate.bat        # Windows
+./obfuscate.sh       # Linux/Mac
+```
+
+## What Gets Obfuscated?
+
+- `firebaseConfigParts` → `_0x4a`
+- `firebaseConfig` → `_c`
+- `firestore` → `_d`
+- `auth` → `_a`
+- `currentUser` → `_u`
+- `currentSchoolId` → `_s`
+- `elements` → `_e`
+- `loadSections` → `_ls`
+- `loadAssignments` → `_la`
+- `editAssignment` → `_ed`
+- `deleteAssignment` → `_dl`
+- All comments removed
+- Proper formatting maintained
+
+## Important Rules
+
+✅ **DO:**
+
+- Edit `app.js` only
+- Run obfuscation before deploying
+- Deploy `app.obfuscated.js` to public
+- Keep `app.js` in private repo
+
+❌ **DON'T:**
+
+- Never commit `app.js` to public repo
+- Never edit `app.obfuscated.js` directly
+- Never skip obfuscation step
+
+## Example Workflow
+
+```bash
+# 1. Make changes
+vim app.js
+
+# 2. Test locally
+python -m http.server 8000
+
+# 3. Obfuscate
+./obfuscate.sh simple
+
+# 4. Deploy
+cp app.obfuscated.js ../public-repo/javascript_erp_firestore_schooladmin/
+cd ../public-repo
+git add app.obfuscated.js
+git commit -m "Update admin app"
+git push
+```
+
+## Troubleshooting
+
+### "Permission denied" on Linux/Mac
+
+```bash
+chmod +x obfuscate.sh
+```
+
+### "javascript-obfuscator not found"
+
+Use simple mode:
+
+```bash
+./obfuscate.sh simple
+```
+
+Or install:
+
+```bash
+npm install -g javascript-obfuscator
+```
+
+## Features
+
+- Google Authentication
+- Section Management
+- Teacher Assignment
+- Assignment Tracking
+- Edit/Delete Assignments
