@@ -30,6 +30,8 @@ const auth = firebase.auth();
 let currentUser = null;
 let currentSchoolId = null;
 let editModal = null;
+let allAssignments = []; // Store all assignments for filtering/sorting
+let currentSort = { field: 'assignedAt', direction: 'desc' };
 
 // DOM elements
 const elements = {
@@ -48,7 +50,12 @@ const elements = {
     editAssignmentId: document.getElementById('edit-assignment-id'),
     editTeacherEmail: document.getElementById('edit-teacher-email'),
     editTeacherRole: document.getElementById('edit-teacher-role'),
-    saveEditBtn: document.getElementById('save-edit-btn')
+    saveEditBtn: document.getElementById('save-edit-btn'),
+    filterSection: document.getElementById('filter-section'),
+    filterTeacher: document.getElementById('filter-teacher'),
+    filterRole: document.getElementById('filter-role'),
+    filterAssignedBy: document.getElementById('filter-assignedby'),
+    clearFilters: document.getElementById('clear-filters')
 };
 
 // Authentication state listener
@@ -160,24 +167,142 @@ async function loadAssignments() {
             .orderBy('assignedAt', 'desc')
             .get();
         
-        let tableHtml = '';
-        let hasAssignments = false;
+        // Store assignments for filtering/sorting
+        allAssignments = [];
+        const sectionsSet = new Set();
+        const teachersSet = new Set();
+        const assignedBySet = new Set();
 
         snapshot.docs.forEach(doc => {
             const assignment = doc.data();
-            // Only show assignments for sections where current user is admin
             if (adminSectionIds.has(assignment.sectionId)) {
-                tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td><span class="badge bg-${assignment.role === 'admin' ? 'danger' : assignment.role === 'editor' ? 'warning' : 'info'}">${assignment.role || 'viewer'}</span></td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${doc.id}','${assignment.teacherEmail}','${assignment.role || 'viewer'}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${doc.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
-                hasAssignments = true;
+                allAssignments.push({ id: doc.id, ...assignment });
+                sectionsSet.add(assignment.sectionId);
+                teachersSet.add(assignment.teacherEmail);
+                assignedBySet.add(assignment.assignedBy || 'N/A');
             }
         });
+
+        // Populate filter dropdowns
+        populateFilterDropdowns(sectionsSet, teachersSet, assignedBySet);
         
-        elements.assignmentsTable.innerHTML = hasAssignments ? tableHtml : '<tr><td colspan="6" class="text-center text-muted py-4">No assignments for your admin sections</td></tr>';
+        // Render with current filters and sort
+        renderAssignments();
     } catch (error) {
         console.error('Load assignments:', error);
         elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error loading</td></tr>';
     }
 }
+
+// Populate filter dropdowns
+function populateFilterDropdowns(sections, teachers, assignedBy) {
+    const sectionSelect = elements.filterSection;
+    const teacherSelect = elements.filterTeacher;
+    const assignedBySelect = elements.filterAssignedBy;
+    
+    // Save current selections
+    const currentSection = sectionSelect.value;
+    const currentTeacher = teacherSelect.value;
+    const currentAssignedBy = assignedBySelect.value;
+    
+    // Reset and rebuild
+    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+    teacherSelect.innerHTML = '<option value="">All Teachers</option>';
+    assignedBySelect.innerHTML = '<option value="">All Assigned By</option>';
+    
+    Array.from(sections).sort().forEach(section => {
+        sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
+    });
+    
+    Array.from(teachers).sort().forEach(teacher => {
+        teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+    });
+    
+    Array.from(assignedBy).sort().forEach(by => {
+        assignedBySelect.innerHTML += `<option value="${by}">${by}</option>`;
+    });
+    
+    // Restore selections if still valid
+    if (sections.has(currentSection)) sectionSelect.value = currentSection;
+    if (teachers.has(currentTeacher)) teacherSelect.value = currentTeacher;
+    if (assignedBy.has(currentAssignedBy)) assignedBySelect.value = currentAssignedBy;
+}
+
+// Filter and sort assignments
+function getFilteredAndSortedAssignments() {
+    const sectionFilter = elements.filterSection.value;
+    const teacherFilter = elements.filterTeacher.value;
+    const roleFilter = elements.filterRole.value;
+    const assignedByFilter = elements.filterAssignedBy.value;
+    
+    let filtered = allAssignments.filter(a => {
+        if (sectionFilter && a.sectionId !== sectionFilter) return false;
+        if (teacherFilter && a.teacherEmail !== teacherFilter) return false;
+        if (roleFilter && (a.role || 'viewer') !== roleFilter) return false;
+        if (assignedByFilter && (a.assignedBy || 'N/A') !== assignedByFilter) return false;
+        return true;
+    });
+    
+    // Sort
+    filtered.sort((a, b) => {
+        let aVal = a[currentSort.field] || '';
+        let bVal = b[currentSort.field] || '';
+        
+        if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+        if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+        
+        if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+    
+    return filtered;
+}
+
+// Render assignments table
+function renderAssignments() {
+    const assignments = getFilteredAndSortedAssignments();
+    
+    if (assignments.length === 0) {
+        elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No assignments match the filters</td></tr>';
+        return;
+    }
+    
+    let tableHtml = '';
+    assignments.forEach(assignment => {
+        tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td><span class="badge bg-${assignment.role === 'admin' ? 'danger' : assignment.role === 'editor' ? 'warning' : 'info'}">${assignment.role || 'viewer'}</span></td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${assignment.id}','${assignment.teacherEmail}','${assignment.role || 'viewer'}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${assignment.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
+    });
+    
+    elements.assignmentsTable.innerHTML = tableHtml;
+}
+
+// Sort header click handler
+document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+        const field = th.dataset.sort;
+        if (currentSort.field === field) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.field = field;
+            currentSort.direction = 'asc';
+        }
+        renderAssignments();
+    });
+});
+
+// Filter change handlers
+[elements.filterSection, elements.filterTeacher, elements.filterRole, elements.filterAssignedBy].forEach(el => {
+    el.addEventListener('change', renderAssignments);
+});
+
+// Clear filters
+elements.clearFilters.onclick = () => {
+    elements.filterSection.value = '';
+    elements.filterTeacher.value = '';
+    elements.filterRole.value = '';
+    elements.filterAssignedBy.value = '';
+    renderAssignments();
+};
 
 // Assign teacher to section
 elements.assignBtn.onclick = async () => {
