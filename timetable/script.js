@@ -57,6 +57,9 @@
             auth.onAuthStateChanged(async (user) => {
                 if (user) {
                     currentUser = user;
+                    // Display user email
+                    const userEmailEl = document.getElementById('user-email');
+                    if (userEmailEl) userEmailEl.textContent = user.email;
                     await initAppWithSync();
                 } else {
                     // Not authenticated, load from localStorage only
@@ -69,8 +72,22 @@
 
         // Initialize app with Firestore sync
         async function initAppWithSync() {
+            // Load schools for navbar
+            await loadNavSchools();
+            
             const hasLocalTimetable = !!localStorage.getItem('schoolTimetable');
             const hasLocalHolidays = !!localStorage.getItem('schoolHolidays');
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            
+            if (!selectedSchool) {
+                loadFromLocalStorage();
+                updateSyncStatus('local-only', 'Select a school');
+                showPushButton();
+                setupTabs();
+                setupEventListeners();
+                initUI();
+                return;
+            }
             
             // Try to load from Firestore first
             const firestoreData = await loadFromFirestore();
@@ -90,7 +107,7 @@
                 saveTeacherSubjectMapToStorage();
                 localStorage.setItem('currentYear', state.currentYear);
                 
-                updateSyncStatus('synced', 'Synced with Firestore');
+                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
             } else if (hasLocalTimetable) {
                 // No Firestore data but localStorage has data
                 loadFromLocalStorage();
@@ -110,10 +127,78 @@
             initUI();
         }
 
+        // Load schools for navbar dropdown
+        async function loadNavSchools() {
+            try {
+                const snapshot = await firestore.collection('schools').get();
+                const select = document.getElementById('nav-school-select');
+                
+                let optionsHtml = '<option value="">Select School</option>';
+                snapshot.docs.forEach(doc => {
+                    const schoolData = doc.data();
+                    const schoolName = schoolData.schoolName || doc.id;
+                    optionsHtml += `<option value="${doc.id}">${schoolName}</option>`;
+                });
+                
+                select.innerHTML = optionsHtml;
+                
+                // Restore selected school from localStorage
+                const savedSchool = localStorage.getItem('selectedSchool');
+                if (savedSchool) {
+                    select.value = savedSchool;
+                }
+                
+                // Save selection on change and reload
+                select.addEventListener('change', async function() {
+                    localStorage.setItem('selectedSchool', this.value);
+                    if (this.value) {
+                        await reloadForSchool();
+                    }
+                });
+            } catch (error) {
+                console.error('Load schools for nav:', error);
+            }
+        }
+
+        // Reload data when school changes
+        async function reloadForSchool() {
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            if (!selectedSchool) return;
+            
+            updateSyncStatus('syncing', 'Loading...');
+            const firestoreData = await loadFromFirestore();
+            
+            if (firestoreData) {
+                state.timetableData = firestoreData.timetableData;
+                state.holidays = firestoreData.holidays || sampleHolidays;
+                state.periodTimes = firestoreData.periodTimes || {};
+                state.teacherSubjectMap = firestoreData.teacherSubjectMap || {};
+                state.currentYear = firestoreData.currentYear || '2026';
+                
+                saveTimetableToStorage();
+                saveHolidaysToStorage();
+                savePeriodTimesToStorage();
+                saveTeacherSubjectMapToStorage();
+                localStorage.setItem('currentYear', state.currentYear);
+                
+                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
+                hidePushButton();
+            } else {
+                loadFromLocalStorage();
+                updateSyncStatus('local-only', 'Local only - Push to sync');
+                showPushButton();
+            }
+            
+            initUI();
+        }
+
         // Load data from Firestore
         async function loadFromFirestore() {
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            if (!selectedSchool) return null;
+            
             try {
-                const doc = await firestore.collection('timetable').doc('current').get();
+                const doc = await firestore.collection('timetables').doc(selectedSchool).get();
                 if (doc.exists) {
                     return doc.data();
                 }
@@ -131,7 +216,13 @@
                 return;
             }
 
-            updateSyncStatus('syncing', 'Pushing to Firestore...');
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            if (!selectedSchool) {
+                alert('Please select a school first');
+                return;
+            }
+
+            updateSyncStatus('syncing', 'Pushing...');
 
             try {
                 const dataToPush = {
@@ -140,13 +231,14 @@
                     periodTimes: state.periodTimes,
                     teacherSubjectMap: state.teacherSubjectMap,
                     currentYear: state.currentYear,
+                    schoolId: selectedSchool,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: currentUser.email
                 };
 
-                await firestore.collection('timetable').doc('current').set(dataToPush);
+                await firestore.collection('timetables').doc(selectedSchool).set(dataToPush);
                 
-                updateSyncStatus('synced', 'Synced with Firestore');
+                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
                 hidePushButton();
                 alert('Timetable pushed to Firestore successfully!');
             } catch (error) {

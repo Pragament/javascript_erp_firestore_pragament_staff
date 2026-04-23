@@ -55,7 +55,8 @@ const elements = {
     filterTeacher: document.getElementById('filter-teacher'),
     filterRole: document.getElementById('filter-role'),
     filterAssignedBy: document.getElementById('filter-assignedby'),
-    clearFilters: document.getElementById('clear-filters')
+    clearFilters: document.getElementById('clear-filters'),
+    navSchoolSelect: document.getElementById('nav-school-select')
 };
 
 // Authentication state listener
@@ -89,8 +90,39 @@ elements.signoutBtn.onclick = () => auth.signOut();
 // Initialize app after authentication
 async function initializeApp() {
     editModal = new bootstrap.Modal(elements.editModalEl);
+    await loadNavSchools();
     await loadSections();
     await loadAssignments();
+}
+
+// Load schools for navbar dropdown
+async function loadNavSchools() {
+    try {
+        const snapshot = await firestore.collection('schools').get();
+        const select = elements.navSchoolSelect;
+        
+        let optionsHtml = '<option value="">Select School</option>';
+        snapshot.docs.forEach(doc => {
+            const schoolData = doc.data();
+            const schoolName = schoolData.schoolName || doc.id;
+            optionsHtml += `<option value="${doc.id}">${schoolName}</option>`;
+        });
+        
+        select.innerHTML = optionsHtml;
+        
+        // Restore selected school from localStorage
+        const savedSchool = localStorage.getItem('selectedSchool');
+        if (savedSchool) {
+            select.value = savedSchool;
+        }
+        
+        // Save selection on change
+        select.addEventListener('change', function() {
+            localStorage.setItem('selectedSchool', this.value);
+        });
+    } catch (error) {
+        console.error('Load schools for nav:', error);
+    }
 }
 
 // Load sections from Firestore (filtered by admin role)
