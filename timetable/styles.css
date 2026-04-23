@@ -49,6 +49,54 @@
             margin-bottom: 5px;
         }
         
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .sync-status.local-only {
+            background-color: var(--warning-color);
+            color: white;
+        }
+        
+        .sync-status.synced {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .sync-status.syncing {
+            background-color: #2196f3;
+            color: white;
+        }
+        
+        .sync-status.error {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #303f9f;
+        }
+        
+        .me-3 {
+            margin-right: 12px;
+        }
+        
         .header-left p {
             opacity: 0.9;
             font-size: 0.9rem;

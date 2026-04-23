@@ -1,3 +1,29 @@
+        // Firebase Configuration
+        const firebaseConfigParts = [
+            'edutrack-admin',
+            'firebaseapp',
+            'AIzaSyAFpwi3k7Qth9MiqqRGKstY0Zkj_vrcdFY',
+            '193864081571',
+            '1:193864081571:web:7501afde01291f81e61f16',
+            'com',
+            'storage',
+            'app'
+        ];
+
+        const firebaseConfig = {
+            apiKey: firebaseConfigParts[2],
+            authDomain: firebaseConfigParts[0] + '.' + firebaseConfigParts[1] + '.' + firebaseConfigParts[5],
+            projectId: firebaseConfigParts[0],
+            storageBucket: firebaseConfigParts[0] + '.' + firebaseConfigParts[1] + firebaseConfigParts[6] + '.' + firebaseConfigParts[7],
+            messagingSenderId: firebaseConfigParts[3],
+            appId: firebaseConfigParts[4]
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const firestore = firebase.firestore();
+        const auth = firebase.auth();
+
         // Application state
         const state = {
             timetableData: null,
@@ -12,6 +38,8 @@
             overlapCheckInProgress: false,
             teacherSubjectMap: {}
         };
+
+        let currentUser = null;
         
         // Sample data for demonstration
         const sampleHolidays = [
@@ -25,18 +53,136 @@
         
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Load data from localStorage if available
-            loadFromLocalStorage();
-            
-            // Set up tab navigation
-            setupTabs();
-            
-            // Set up event listeners
-            setupEventListeners();
-            
-            // Initialize the UI
-            initUI();
+            // Check auth state and initialize
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    currentUser = user;
+                    await initAppWithSync();
+                } else {
+                    // Not authenticated, load from localStorage only
+                    loadFromLocalStorage();
+                    updateSyncStatus('local-only', 'Not authenticated');
+                    initUI();
+                }
+            });
         });
+
+        // Initialize app with Firestore sync
+        async function initAppWithSync() {
+            const hasLocalTimetable = !!localStorage.getItem('schoolTimetable');
+            const hasLocalHolidays = !!localStorage.getItem('schoolHolidays');
+            
+            // Try to load from Firestore first
+            const firestoreData = await loadFromFirestore();
+            
+            if (firestoreData) {
+                // Firestore has data - use it and save to localStorage
+                state.timetableData = firestoreData.timetableData;
+                state.holidays = firestoreData.holidays || sampleHolidays;
+                state.periodTimes = firestoreData.periodTimes || {};
+                state.teacherSubjectMap = firestoreData.teacherSubjectMap || {};
+                state.currentYear = firestoreData.currentYear || '2026';
+                
+                // Save to localStorage
+                saveTimetableToStorage();
+                saveHolidaysToStorage();
+                savePeriodTimesToStorage();
+                saveTeacherSubjectMapToStorage();
+                localStorage.setItem('currentYear', state.currentYear);
+                
+                updateSyncStatus('synced', 'Synced with Firestore');
+            } else if (hasLocalTimetable) {
+                // No Firestore data but localStorage has data
+                loadFromLocalStorage();
+                updateSyncStatus('local-only', 'Local only - Push to sync');
+                showPushButton();
+            } else {
+                // No data anywhere - use defaults
+                state.holidays = sampleHolidays;
+                saveHolidaysToStorage();
+                loadFromLocalStorage();
+                updateSyncStatus('local-only', 'No data - Upload timetable');
+            }
+            
+            // Set up UI
+            setupTabs();
+            setupEventListeners();
+            initUI();
+        }
+
+        // Load data from Firestore
+        async function loadFromFirestore() {
+            try {
+                const doc = await firestore.collection('timetable').doc('current').get();
+                if (doc.exists) {
+                    return doc.data();
+                }
+                return null;
+            } catch (error) {
+                console.error('Error loading from Firestore:', error);
+                return null;
+            }
+        }
+
+        // Push data to Firestore
+        async function pushToFirestore() {
+            if (!currentUser) {
+                alert('Please sign in first');
+                return;
+            }
+
+            updateSyncStatus('syncing', 'Pushing to Firestore...');
+
+            try {
+                const dataToPush = {
+                    timetableData: state.timetableData,
+                    holidays: state.holidays,
+                    periodTimes: state.periodTimes,
+                    teacherSubjectMap: state.teacherSubjectMap,
+                    currentYear: state.currentYear,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: currentUser.email
+                };
+
+                await firestore.collection('timetable').doc('current').set(dataToPush);
+                
+                updateSyncStatus('synced', 'Synced with Firestore');
+                hidePushButton();
+                alert('Timetable pushed to Firestore successfully!');
+            } catch (error) {
+                console.error('Error pushing to Firestore:', error);
+                updateSyncStatus('error', 'Sync failed');
+                alert('Failed to push to Firestore: ' + error.message);
+            }
+        }
+
+        // Update sync status UI
+        function updateSyncStatus(status, message) {
+            const statusEl = document.getElementById('syncStatus');
+            const textEl = document.getElementById('syncStatusText');
+            
+            statusEl.className = 'sync-status me-3 ' + status;
+            
+            const icons = {
+                'synced': '<i class="fas fa-check-circle"></i>',
+                'local-only': '<i class="fas fa-exclamation-triangle"></i>',
+                'syncing': '<i class="fas fa-circle-notch fa-spin"></i>',
+                'error': '<i class="fas fa-times-circle"></i>'
+            };
+            
+            textEl.innerHTML = icons[status] + ' ' + message;
+        }
+
+        // Show/hide push button
+        function showPushButton() {
+            const btn = document.getElementById('pushToFirestoreBtn');
+            if (btn) btn.style.display = 'inline-block';
+        }
+
+        function hidePushButton() {
+            const btn = document.getElementById('pushToFirestoreBtn');
+            if (btn) btn.style.display = 'none';
+        }
         
         // Load data from localStorage
         function loadFromLocalStorage() {
@@ -113,6 +259,9 @@
             document.getElementById('dashboardBtn').addEventListener('click', function() {
                 alert("Redirecting to Dashboard...");
             });
+
+            // Push to Firestore button
+            document.getElementById('pushToFirestoreBtn').addEventListener('click', pushToFirestore);
             
             // Holiday management
             document.getElementById('addHolidayBtn').addEventListener('click', openAddHolidayModal);

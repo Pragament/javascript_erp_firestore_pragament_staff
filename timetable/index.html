@@ -6,6 +6,10 @@
     <title>School Timetable Manager</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -16,6 +20,12 @@
                 <p>Manage timetables, holidays, and teacher schedules efficiently</p>
             </div>
             <div class="header-right">
+                <div id="syncStatus" class="sync-status me-3">
+                    <span id="syncStatusText"><i class="fas fa-circle-notch fa-spin"></i> Checking...</span>
+                </div>
+                <button id="pushToFirestoreBtn" class="btn-primary" style="display: none; margin-right: 10px;">
+                    <i class="fas fa-cloud-upload-alt"></i> Push to Firestore
+                </button>
                 <button id="dashboardBtn" onclick="window.location.href='../index.html'">
                     <i class="fas fa-tachometer-alt"></i> Back to Dashboard
                 </button>
