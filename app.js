@@ -29,6 +29,7 @@ const auth = firebase.auth();
 // Global variables
 let currentUser = null;
 let currentSchoolId = null;
+let editModal = null;
 
 // DOM elements
 const elements = {
@@ -42,7 +43,12 @@ const elements = {
     teacherRole: document.getElementById('teacher-role'),
     assignBtn: document.getElementById('assign-btn'),
     refreshBtn: document.getElementById('refresh-btn'),
-    assignmentsTable: document.getElementById('assignments-table')
+    assignmentsTable: document.getElementById('assignments-table'),
+    editModalEl: document.getElementById('editModal'),
+    editAssignmentId: document.getElementById('edit-assignment-id'),
+    editTeacherEmail: document.getElementById('edit-teacher-email'),
+    editTeacherRole: document.getElementById('edit-teacher-role'),
+    saveEditBtn: document.getElementById('save-edit-btn')
 };
 
 // Authentication state listener
@@ -75,6 +81,7 @@ elements.signoutBtn.onclick = () => auth.signOut();
 
 // Initialize app after authentication
 async function initializeApp() {
+    editModal = new bootstrap.Modal(elements.editModalEl);
     await loadSections();
     await loadAssignments();
 }
@@ -177,26 +184,31 @@ elements.assignBtn.onclick = async () => {
 elements.refreshBtn.onclick = () => loadAssignments();
 
 // Edit assignment function (global scope for onclick)
-window.editAssignment = async (assignmentId, currentEmail, currentRole) => {
-    const newEmail = prompt('Enter new teacher email:', currentEmail);
-    if (newEmail === null) return;
+window.editAssignment = (assignmentId, currentEmail, currentRole) => {
+    elements.editAssignmentId.value = assignmentId;
+    elements.editTeacherEmail.value = currentEmail;
+    elements.editTeacherRole.value = currentRole;
+    editModal.show();
+};
+
+// Save edited assignment
+elements.saveEditBtn.onclick = async () => {
+    const assignmentId = elements.editAssignmentId.value;
+    const newEmail = elements.editTeacherEmail.value.trim();
+    const newRole = elements.editTeacherRole.value;
     
-    const newRole = prompt('Enter role (viewer/editor/admin):', currentRole);
-    if (newRole === null) return;
-    
-    if ((!newEmail || newEmail === currentEmail) && (!newRole || newRole === currentRole)) {
+    if (!newEmail || !newEmail.includes('@')) {
+        alert('Please enter a valid email');
         return;
     }
     
     try {
-        const updates = {
+        await firestore.collection('teacherAssignments').doc(assignmentId).update({
+            teacherEmail: newEmail,
+            role: newRole,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        if (newEmail && newEmail !== currentEmail) updates.teacherEmail = newEmail;
-        if (newRole && newRole !== currentRole && ['viewer', 'editor', 'admin'].includes(newRole)) updates.role = newRole;
-        
-        await firestore.collection('teacherAssignments').doc(assignmentId).update(updates);
-        alert('Updated!');
+        });
+        editModal.hide();
         await loadAssignments();
     } catch (error) {
         alert('Failed: ' + error.message);
