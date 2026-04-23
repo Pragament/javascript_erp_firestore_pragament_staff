@@ -136,25 +136,43 @@ async function loadSections() {
     }
 }
 
-// Load teacher assignments from Firestore
+// Load teacher assignments from Firestore (filtered by admin sections)
 async function loadAssignments() {
     try {
+        // Get current user's admin section IDs
+        const adminSnapshot = await firestore.collection('teacherAssignments')
+            .where('teacherEmail', '==', currentUser.email)
+            .where('role', '==', 'admin')
+            .get();
+
+        const adminSectionIds = new Set();
+        adminSnapshot.docs.forEach(doc => {
+            adminSectionIds.add(doc.data().sectionId);
+        });
+
+        if (adminSectionIds.size === 0) {
+            elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No admin sections found</td></tr>';
+            return;
+        }
+
+        // Load all assignments and filter by admin sections
         const snapshot = await firestore.collection('teacherAssignments')
             .orderBy('assignedAt', 'desc')
             .get();
         
-        if (snapshot.empty) {
-            elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No assignments yet</td></tr>';
-            return;
-        }
-
         let tableHtml = '';
+        let hasAssignments = false;
+
         snapshot.docs.forEach(doc => {
             const assignment = doc.data();
-            tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td><span class="badge bg-${assignment.role === 'admin' ? 'danger' : assignment.role === 'editor' ? 'warning' : 'info'}">${assignment.role || 'viewer'}</span></td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${doc.id}','${assignment.teacherEmail}','${assignment.role || 'viewer'}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${doc.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
+            // Only show assignments for sections where current user is admin
+            if (adminSectionIds.has(assignment.sectionId)) {
+                tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td><span class="badge bg-${assignment.role === 'admin' ? 'danger' : assignment.role === 'editor' ? 'warning' : 'info'}">${assignment.role || 'viewer'}</span></td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${doc.id}','${assignment.teacherEmail}','${assignment.role || 'viewer'}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${doc.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
+                hasAssignments = true;
+            }
         });
         
-        elements.assignmentsTable.innerHTML = tableHtml;
+        elements.assignmentsTable.innerHTML = hasAssignments ? tableHtml : '<tr><td colspan="6" class="text-center text-muted py-4">No assignments for your admin sections</td></tr>';
     } catch (error) {
         console.error('Load assignments:', error);
         elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error loading</td></tr>';
