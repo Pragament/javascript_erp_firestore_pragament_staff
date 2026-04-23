@@ -169,7 +169,7 @@ async function loadAssignments() {
         
         // Store assignments for filtering/sorting
         allAssignments = [];
-        const sectionsSet = new Set();
+        const sectionsMap = new Map(); // sectionId -> sectionName
         const teachersSet = new Set();
         const assignedBySet = new Set();
 
@@ -177,14 +177,14 @@ async function loadAssignments() {
             const assignment = doc.data();
             if (adminSectionIds.has(assignment.sectionId)) {
                 allAssignments.push({ id: doc.id, ...assignment });
-                sectionsSet.add(assignment.sectionId);
+                sectionsMap.set(assignment.sectionId, assignment.sectionName || assignment.sectionId);
                 teachersSet.add(assignment.teacherEmail);
                 assignedBySet.add(assignment.assignedBy || 'N/A');
             }
         });
 
         // Populate filter dropdowns
-        populateFilterDropdowns(sectionsSet, teachersSet, assignedBySet);
+        populateFilterDropdowns(sectionsMap, teachersSet, assignedBySet);
         
         // Render with current filters and sort
         renderAssignments();
@@ -195,7 +195,7 @@ async function loadAssignments() {
 }
 
 // Populate filter dropdowns
-function populateFilterDropdowns(sections, teachers, assignedBy) {
+function populateFilterDropdowns(sectionsMap, teachers, assignedBy) {
     const sectionSelect = elements.filterSection;
     const teacherSelect = elements.filterTeacher;
     const assignedBySelect = elements.filterAssignedBy;
@@ -210,9 +210,12 @@ function populateFilterDropdowns(sections, teachers, assignedBy) {
     teacherSelect.innerHTML = '<option value="">All Teachers</option>';
     assignedBySelect.innerHTML = '<option value="">All Assigned By</option>';
     
-    Array.from(sections).sort().forEach(section => {
-        sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
-    });
+    // Sort by section name for display
+    Array.from(sectionsMap.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([sectionId, sectionName]) => {
+            sectionSelect.innerHTML += `<option value="${sectionId}">${sectionName}</option>`;
+        });
     
     Array.from(teachers).sort().forEach(teacher => {
         teacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
@@ -223,7 +226,7 @@ function populateFilterDropdowns(sections, teachers, assignedBy) {
     });
     
     // Restore selections if still valid
-    if (sections.has(currentSection)) sectionSelect.value = currentSection;
+    if (sectionsMap.has(currentSection)) sectionSelect.value = currentSection;
     if (teachers.has(currentTeacher)) teacherSelect.value = currentTeacher;
     if (assignedBy.has(currentAssignedBy)) assignedBySelect.value = currentAssignedBy;
 }
