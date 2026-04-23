@@ -86,9 +86,26 @@ async function initializeApp() {
     await loadAssignments();
 }
 
-// Load sections from Firestore
+// Load sections from Firestore (filtered by admin role)
 async function loadSections() {
     try {
+        // Get current user's admin assignments
+        const assignmentsSnapshot = await firestore.collection('teacherAssignments')
+            .where('teacherEmail', '==', currentUser.email)
+            .where('role', '==', 'admin')
+            .get();
+
+        const adminSectionIds = new Set();
+        assignmentsSnapshot.docs.forEach(doc => {
+            adminSectionIds.add(doc.data().sectionId);
+        });
+
+        if (adminSectionIds.size === 0) {
+            elements.sectionSelect.innerHTML = '<option value="">No admin sections found</option>';
+            return;
+        }
+
+        // Load schools and filter sections
         const snapshot = await firestore.collection('schools').get();
         
         if (snapshot.empty) {
@@ -97,6 +114,7 @@ async function loadSections() {
         }
 
         let optionsHtml = '<option value="">Select a section</option>';
+        let hasSections = false;
         
         for (const doc of snapshot.docs) {
             const schoolData = doc.data();
@@ -104,11 +122,14 @@ async function loadSections() {
             const sections = schoolData.sections || [];
             
             sections.forEach(section => {
-                optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
+                if (adminSectionIds.has(section.sectionId)) {
+                    optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
+                    hasSections = true;
+                }
             });
         }
         
-        elements.sectionSelect.innerHTML = optionsHtml;
+        elements.sectionSelect.innerHTML = hasSections ? optionsHtml : '<option value="">No admin sections found</option>';
     } catch (error) {
         console.error('Load sections:', error);
         elements.sectionSelect.innerHTML = '<option value="">Error loading</option>';
