@@ -39,6 +39,7 @@ const elements = {
     userEmail: document.getElementById('user-email'),
     sectionSelect: document.getElementById('section-select'),
     teacherEmail: document.getElementById('teacher-email'),
+    teacherRole: document.getElementById('teacher-role'),
     assignBtn: document.getElementById('assign-btn'),
     refreshBtn: document.getElementById('refresh-btn'),
     assignmentsTable: document.getElementById('assignments-table')
@@ -115,20 +116,20 @@ async function loadAssignments() {
             .get();
         
         if (snapshot.empty) {
-            elements.assignmentsTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No assignments yet</td></tr>';
+            elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No assignments yet</td></tr>';
             return;
         }
 
         let tableHtml = '';
         snapshot.docs.forEach(doc => {
             const assignment = doc.data();
-            tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${doc.id}','${assignment.teacherEmail}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${doc.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
+            tableHtml += `<tr><td>${assignment.sectionName || 'N/A'}</td><td><code class="small">${assignment.sectionId}</code></td><td>${assignment.teacherEmail}</td><td><span class="badge bg-${assignment.role === 'admin' ? 'danger' : assignment.role === 'editor' ? 'warning' : 'info'}">${assignment.role || 'viewer'}</span></td><td class="small text-muted">${assignment.assignedBy || 'N/A'}</td><td class="text-center"><button class="btn btn-sm btn-warning btn-sm-action me-1" onclick="editAssignment('${doc.id}','${assignment.teacherEmail}','${assignment.role || 'viewer'}')"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-danger btn-sm-action" onclick="deleteAssignment('${doc.id}')"><i class="bi bi-trash"></i></button></td></tr>`;
         });
         
         elements.assignmentsTable.innerHTML = tableHtml;
     } catch (error) {
         console.error('Load assignments:', error);
-        elements.assignmentsTable.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error loading</td></tr>';
+        elements.assignmentsTable.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error loading</td></tr>';
     }
 }
 
@@ -136,6 +137,7 @@ async function loadAssignments() {
 elements.assignBtn.onclick = async () => {
     const sectionId = elements.sectionSelect.value;
     const teacherEmail = elements.teacherEmail.value.trim();
+    const teacherRole = elements.teacherRole.value;
     
     if (!sectionId || !teacherEmail) {
         alert('Please select section and enter email');
@@ -155,6 +157,7 @@ elements.assignBtn.onclick = async () => {
             sectionId: sectionId,
             sectionName: sectionName,
             teacherEmail: teacherEmail,
+            role: teacherRole,
             schoolId: currentSchoolId,
             assignedAt: firebase.firestore.FieldValue.serverTimestamp(),
             assignedBy: currentUser.email
@@ -162,6 +165,7 @@ elements.assignBtn.onclick = async () => {
         
         elements.teacherEmail.value = '';
         elements.sectionSelect.value = '';
+        elements.teacherRole.value = 'viewer';
         alert('Teacher assigned successfully!');
         await loadAssignments();
     } catch (error) {
@@ -173,18 +177,25 @@ elements.assignBtn.onclick = async () => {
 elements.refreshBtn.onclick = () => loadAssignments();
 
 // Edit assignment function (global scope for onclick)
-window.editAssignment = async (assignmentId, currentEmail) => {
+window.editAssignment = async (assignmentId, currentEmail, currentRole) => {
     const newEmail = prompt('Enter new teacher email:', currentEmail);
+    if (newEmail === null) return;
     
-    if (!newEmail || newEmail === currentEmail) {
+    const newRole = prompt('Enter role (viewer/editor/admin):', currentRole);
+    if (newRole === null) return;
+    
+    if ((!newEmail || newEmail === currentEmail) && (!newRole || newRole === currentRole)) {
         return;
     }
     
     try {
-        await firestore.collection('teacherAssignments').doc(assignmentId).update({
-            teacherEmail: newEmail,
+        const updates = {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        if (newEmail && newEmail !== currentEmail) updates.teacherEmail = newEmail;
+        if (newRole && newRole !== currentRole && ['viewer', 'editor', 'admin'].includes(newRole)) updates.role = newRole;
+        
+        await firestore.collection('teacherAssignments').doc(assignmentId).update(updates);
         alert('Updated!');
         await loadAssignments();
     } catch (error) {

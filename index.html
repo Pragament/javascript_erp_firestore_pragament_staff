@@ -58,6 +58,15 @@
                                 <input type="email" id="teacher-email" class="form-control form-control-lg" 
                                        placeholder="teacher@school.com" autocomplete="email">
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Role</label>
+                                <select id="teacher-role" class="form-select form-select-lg">
+                                    <option value="viewer">Viewer</option>
+                                    <option value="editor">Editor</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <small class="text-muted">Permission level for this section</small>
+                            </div>
                             <button id="assign-btn" class="btn btn-lg w-100" style="background: #2c3e50; color: white; border: none;">
                                 <i class="bi bi-check-circle-fill me-2"></i>Assign Teacher
                             </button>
@@ -81,13 +90,14 @@
                                             <th>Section Name</th>
                                             <th>Section ID</th>
                                             <th>Teacher Email</th>
+                                            <th>Role</th>
                                             <th>Assigned By</th>
                                             <th class="text-center">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="assignments-table">
                                         <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">
+                                            <td colspan="6" class="text-center text-muted py-4">
                                                 <div class="spinner-border spinner-border-sm me-2"></div>
                                                 Loading assignments...
                                             </td>
