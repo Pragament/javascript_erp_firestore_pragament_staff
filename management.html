@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Management - Principal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f8f9fa;
+        }
+        
+        body {
+            background-color: var(--light-bg);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .navbar {
+            background-color: var(--primary-color) !important;
+        }
+        
+        .nav-tabs .nav-link {
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--accent-color);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 2px solid #f0f0f0;
+            font-weight: 600;
+        }
+        
+        .table th {
+            font-weight: 600;
+            color: var(--secondary-color);
+            border-top: none;
+        }
+        
+        .badge-active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-inactive {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .btn-icon {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .filter-row {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .mapping-card {
+            border-left: 4px solid var(--accent-color);
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .history-timeline {
+            border-left: 3px solid var(--accent-color);
+            padding-left: 1rem;
+            margin-left: 0.5rem;
+        }
+        
+        .history-item {
+            position: relative;
+            padding-bottom: 1rem;
+        }
+        
+        .history-item::before {
+            content: '';
+            position: absolute;
+            left: -1.35rem;
+            top: 0.25rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #6c757d;
+        }
+        
+        .teacher-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand fw-bold">
+                <i class="bi bi-building me-2"></i>School Management
+            </span>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <select id="nav-school-select" class="form-select form-select-sm" style="width: auto; min-width: 150px;">
+                    <option value="">Select School</option>
+                </select>
+                <select id="nav-year-select" class="form-select form-select-sm" style="width: auto; min-width: 120px;">
+                    <option value="">Select Year</option>
+                    <option value="2024-25">2024-25</option>
+                    <option value="2025-26">2025-26</option>
+                    <option value="2026-27">2026-27</option>
+                    <option value="2027-28">2027-28</option>
+                </select>
+                <a href="help.html" class="btn btn-outline-warning btn-sm" title="Help">
+                    <i class="bi bi-question-circle"></i>
+                </a>
+                <a href="index.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-arrow-left"></i> Dashboard
+                </a>
+                <a href="timetable/index.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-calendar-week"></i> Timetable
+                </a>
+                <span class="text-white d-none d-md-inline" id="user-email"></span>
+                <button id="signout-btn" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- Alert for school/year selection -->
+        <div id="selectionAlert" class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Please select a School and Academic Year</strong> to manage data.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="row mb-4" id="statsRow">
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="stats-number" id="statTeachers">0</div>
+                    <div class="text-muted">Teachers</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="stats-number" id="statSubjects">0</div>
+                    <div class="text-muted">Subjects</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="stats-number" id="statClassSections">0</div>
+                    <div class="text-muted">Class Sections</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="stats-number" id="statMappings">0</div>
+                    <div class="text-muted">Active Mappings</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Management Tabs -->
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="managementTabs">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#teachers" data-bs-toggle="tab">
+                            <i class="bi bi-people me-2"></i>Teachers
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#subjects" data-bs-toggle="tab">
+                            <i class="bi bi-book me-2"></i>Subjects
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#classsections" data-bs-toggle="tab">
+                            <i class="bi bi-grid-3x3 me-2"></i>Class Sections
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#mappings" data-bs-toggle="tab">
+                            <i class="bi bi-diagram-3 me-2"></i>Teacher-Subject Mappings
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#history" data-bs-toggle="tab">
+                            <i class="bi bi-clock-history me-2"></i>Change History
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    
+                    <!-- Teachers Tab -->
+                    <div class="tab-pane fade show active" id="teachers">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Teacher Management</h5>
+                            <button class="btn btn-primary btn-sm" onclick="openTeacherModal()">
+                                <i class="bi bi-plus-lg me-2"></i>Add Teacher
+                            </button>
+                        </div>
+                        
+                        <div class="filter-row">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <input type="text" id="filterTeacherName" class="form-control form-control-sm" placeholder="Filter by name">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" id="filterTeacherEmail" class="form-control form-control-sm" placeholder="Filter by email">
+                                </div>
+                                <div class="col-md-2">
+                                    <select id="filterTeacherStatus" class="form-select form-select-sm">
+                                        <option value="">All Status</option>
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="clearTeacherFilters()">
+                                        <i class="bi bi-x-circle me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Teacher</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Join Date</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="teachersTable">
+                                    <tr><td colspan="6" class="text-center text-muted">Select school and year to view teachers</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Subjects Tab -->
+                    <div class="tab-pane fade" id="subjects">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Subject Management</h5>
+                            <button class="btn btn-primary btn-sm" onclick="openSubjectModal()">
+                                <i class="bi bi-plus-lg me-2"></i>Add Subject
+                            </button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <input type="text" id="filterSubjectName" class="form-control form-control-sm" placeholder="Filter by subject name">
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filterSubjectCode" class="form-select form-select-sm">
+                                        <option value="">Filter by code</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="clearSubjectFilters()">
+                                        <i class="bi bi-x-circle me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Subject Code</th>
+                                        <th>Subject Name</th>
+                                        <th>Description</th>
+                                        <th>Periods/Week</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="subjectsTable">
+                                    <tr><td colspan="6" class="text-center text-muted">Select school and year to view subjects</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Class Sections Tab -->
+                    <div class="tab-pane fade" id="classsections">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Class Section Management</h5>
+                            <button class="btn btn-primary btn-sm" onclick="openClassSectionModal()">
+                                <i class="bi bi-plus-lg me-2"></i>Add Class Section
+                            </button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <select id="filterClassGrade" class="form-select form-select-sm">
+                                        <option value="">Filter by Grade/Class</option>
+                                        <option value="1">Grade 1</option>
+                                        <option value="2">Grade 2</option>
+                                        <option value="3">Grade 3</option>
+                                        <option value="4">Grade 4</option>
+                                        <option value="5">Grade 5</option>
+                                        <option value="6">Grade 6</option>
+                                        <option value="7">Grade 7</option>
+                                        <option value="8">Grade 8</option>
+                                        <option value="9">Grade 9</option>
+                                        <option value="10">Grade 10</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" id="filterClassSection" class="form-control form-control-sm" placeholder="Filter by section">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="clearClassSectionFilters()">
+                                        <i class="bi bi-x-circle me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Class-Section</th>
+                                        <th>Grade</th>
+                                        <th>Section</th>
+                                        <th>Class Teacher</th>
+                                        <th>Room Number</th>
+                                        <th>Students</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="classSectionsTable">
+                                    <tr><td colspan="7" class="text-center text-muted">Select school and year to view class sections</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Teacher-Subject Mappings Tab -->
+                    <div class="tab-pane fade" id="mappings">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Teacher-Subject-Class Mappings</h5>
+                            <button class="btn btn-primary btn-sm" onclick="openMappingModal()">
+                                <i class="bi bi-plus-lg me-2"></i>Create Mapping
+                            </button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <select id="filterMapTeacher" class="form-select form-select-sm">
+                                        <option value="">Filter by Teacher</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filterMapSubject" class="form-select form-select-sm">
+                                        <option value="">Filter by Subject</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filterMapClass" class="form-select form-select-sm">
+                                        <option value="">Filter by Class</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="clearMappingFilters()">
+                                        <i class="bi bi-x-circle me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row" id="mappingsGrid">
+                            <div class="col-12">
+                                <div class="empty-state">
+                                    <i class="bi bi-diagram-3" style="font-size: 3rem;"></i>
+                                    <p class="mt-3">Select school and year to view mappings</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Change History Tab -->
+                    <div class="tab-pane fade" id="history">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Teacher Assignment History</h5>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterHistory('all')">All</button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterHistory('joined')">Joined</button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterHistory('left')">Left</button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterHistory('transferred')">Transferred</button>
+                            </div>
+                        </div>
+
+                        <div class="history-timeline" id="historyTimeline">
+                            <div class="text-center text-muted py-4">
+                                Select school and year to view change history
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teacher Modal -->
+    <div class="modal fade" id="teacherModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="teacherModalTitle">Add Teacher</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="teacherForm">
+                        <input type="hidden" id="teacherId">
+                        <div class="mb-3">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="teacherName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email Address *</label>
+                            <input type="email" class="form-control" id="teacherEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="teacherPhone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Join Date</label>
+                            <input type="date" class="form-control" id="teacherJoinDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="teacherStatus">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="on_leave">On Leave</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Notes</label>
+                            <textarea class="form-control" id="teacherNotes" rows="2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveTeacher()">Save Teacher</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subject Modal -->
+    <div class="modal fade" id="subjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="subjectModalTitle">Add Subject</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="subjectForm">
+                        <input type="hidden" id="subjectId">
+                        <div class="mb-3">
+                            <label class="form-label">Subject Code *</label>
+                            <input type="text" class="form-control" id="subjectCode" required placeholder="e.g., MATH101">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Subject Name *</label>
+                            <input type="text" class="form-control" id="subjectName" required placeholder="e.g., Mathematics">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="subjectDescription" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Periods per Week</label>
+                            <input type="number" class="form-control" id="subjectPeriods" min="1" max="20" value="5">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="subjectStatus">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveSubject()">Save Subject</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Class Section Modal -->
+    <div class="modal fade" id="classSectionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="classSectionModalTitle">Add Class Section</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="classSectionForm">
+                        <input type="hidden" id="classSectionId">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Grade/Class *</label>
+                                <select class="form-select" id="classGrade" required>
+                                    <option value="">Select Grade</option>
+                                    <option value="1">Grade 1</option>
+                                    <option value="2">Grade 2</option>
+                                    <option value="3">Grade 3</option>
+                                    <option value="4">Grade 4</option>
+                                    <option value="5">Grade 5</option>
+                                    <option value="6">Grade 6</option>
+                                    <option value="7">Grade 7</option>
+                                    <option value="8">Grade 8</option>
+                                    <option value="9">Grade 9</option>
+                                    <option value="10">Grade 10</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Section *</label>
+                                <input type="text" class="form-control" id="classSection" required placeholder="e.g., A, B, C">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Class Teacher</label>
+                            <select class="form-select" id="classTeacher">
+                                <option value="">Select Class Teacher</option>
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Room Number</label>
+                                <input type="text" class="form-control" id="classRoom">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Number of Students</label>
+                                <input type="number" class="form-control" id="classStudents" min="1">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Academic Year</label>
+                            <input type="text" class="form-control" id="classAcademicYear" readonly>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveClassSection()">Save Class Section</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mapping Modal -->
+    <div class="modal fade" id="mappingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="mappingModalTitle">Create Teacher-Subject Mapping</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="mappingForm">
+                        <input type="hidden" id="mappingId">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Teacher *</label>
+                                <select class="form-select" id="mapTeacher" required>
+                                    <option value="">Select Teacher</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Subject *</label>
+                                <select class="form-select" id="mapSubject" required>
+                                    <option value="">Select Subject</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Class Sections *</label>
+                            <div id="mapClassSections" class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                                <div class="text-muted small">Select school and year to view class sections</div>
+                            </div>
+                            <small class="text-muted">Select one or more class sections for this mapping</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Academic Year</label>
+                                <input type="text" class="form-control" id="mapAcademicYear" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Effective From</label>
+                                <input type="date" class="form-control" id="mapEffectiveFrom">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Notes</label>
+                            <textarea class="form-control" id="mapNotes" rows="2" placeholder="e.g., Replaces Mr. Smith from January 15"></textarea>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            This mapping will be active for the selected academic year. Previous year mappings are preserved for reference.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMapping()">Save Mapping</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transfer/Move Teacher Modal -->
+    <div class="modal fade" id="transferModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Record Teacher Change</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="transferForm">
+                        <input type="hidden" id="transferTeacherId">
+                        <div class="mb-3">
+                            <label class="form-label">Teacher</label>
+                            <input type="text" class="form-control" id="transferTeacherName" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Change Type *</label>
+                            <select class="form-select" id="transferType" required>
+                                <option value="">Select type</option>
+                                <option value="joined">New Join</option>
+                                <option value="left">Left School</option>
+                                <option value="transferred_in">Transferred In</option>
+                                <option value="transferred_out">Transferred Out</option>
+                                <option value="promoted">Promoted</option>
+                                <option value="retired">Retired</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Effective Date *</label>
+                            <input type="date" class="form-control" id="transferDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Previous/Next School (if transfer)</label>
+                            <input type="text" class="form-control" id="transferSchool" placeholder="Enter school name">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reason/Notes</label>
+                            <textarea class="form-control" id="transferNotes" rows="2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveTransfer()">Record Change</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="management.js"></script>
+</body>
+</html>

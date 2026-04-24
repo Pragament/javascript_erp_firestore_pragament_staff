@@ -61,19 +61,82 @@ Click the **"Refresh"** button to reload assignments from Firestore.
 
 ---
 
-## 3. Timetable Management
+## 3. School Management (Principal Only)
 
-### 3.1 Navigating to Timetable
+### 3.1 Accessing School Management
+1. Click the **"Manage"** button in the navbar
+2. Or navigate to `/management.html`
+
+### 3.2 Managing Teachers
+1. Select your **School** and **Academic Year**
+2. Click on the **"Teachers"** tab
+3. To add a new teacher:
+   - Click **"Add Teacher"**
+   - Fill in name, email, phone, join date
+   - Select status: Active, Inactive, or On Leave
+   - Click **"Save Teacher"**
+4. To record teacher changes (transfer, exit, etc.):
+   - Find the teacher and click the **transfer icon** (↔)
+   - Select change type: Joined, Left, Transferred In/Out, Promoted, Retired
+   - Enter effective date and notes
+   - Click **"Record Change"**
+
+### 3.3 Managing Subjects
+1. Click on the **"Subjects"** tab
+2. Click **"Add Subject"**
+3. Enter:
+   - **Subject Code** (e.g., MATH101, ENG102)
+   - **Subject Name** (e.g., Mathematics)
+   - **Periods per Week** (default: 5)
+   - Description (optional)
+4. Click **"Save Subject"**
+
+### 3.4 Managing Class Sections
+1. Click on the **"Class Sections"** tab
+2. Click **"Add Class Section"**
+3. Select:
+   - **Grade** (1-10)
+   - **Section** (A, B, C, etc.)
+   - **Class Teacher** from dropdown
+   - Room number and student count (optional)
+4. Academic year is auto-filled from navbar selection
+5. Click **"Save Class Section"**
+
+### 3.5 Teacher-Subject Mappings
+This links teachers to the subjects they teach and the classes they handle:
+
+1. Click on the **"Teacher-Subject Mappings"** tab
+2. Click **"Create Mapping"**
+3. Select:
+   - **Teacher** from dropdown
+   - **Subject** from dropdown
+   - **Class Sections** (checkboxes for all classes this teacher handles)
+   - **Effective From** date (for mid-year changes)
+4. Click **"Save Mapping"**
+
+**Note**: Mappings are specific to the selected academic year. Previous year mappings remain accessible for reference.
+
+### 3.6 Viewing Change History
+1. Click on the **"Change History"** tab
+2. View all teacher changes (joins, transfers, exits)
+3. Filter by type: All, Joined, Left, Transferred
+4. Timeline shows chronological history with icons
+
+---
+
+## 4. Timetable Management
+
+### 4.1 Navigating to Timetable
 1. Click the **"Timetable"** button in the navbar
 2. Or navigate to `/timetable/index.html`
 
-### 3.2 Selecting School and Year
+### 4.2 Selecting School and Year
 Before managing timetables:
 1. Select a **School** from the school dropdown
 2. Select an **Academic Year** from the year dropdown
 3. The sync status will show "Synced" if data exists, or "Local only" if working with local data
 
-### 3.3 Uploading a Timetable
+### 4.3 Uploading a Timetable
 
 #### From Excel File
 1. Click on the **"Upload Timetable"** tab
@@ -89,7 +152,7 @@ Before managing timetables:
 4. Set period times in the modal that appears
 5. Select the **Academic Year** when prompted
 
-### 3.4 Viewing Timetable
+### 4.4 Viewing Timetable
 1. Click on the **"View Timetable"** tab
 2. Select view type:
    - **Class View**: See timetable for a specific class
@@ -98,7 +161,7 @@ Before managing timetables:
 3. Use filters to narrow down results
 4. Click **"Apply Filter"** to view the timetable
 
-### 3.5 Managing Holidays
+### 4.5 Managing Holidays
 1. Click on the **"Holidays"** tab
 2. Click **"Add Holiday"** to create a new holiday
 3. Fill in:
@@ -109,13 +172,13 @@ Before managing timetables:
 4. Click **"Save Holiday"**
 5. Use **"Export Holidays"** to download as CSV
 
-### 3.6 Checking Overlaps
+### 4.6 Checking Overlaps
 1. In the **"View Timetable"** tab
 2. Click **"Check Overlaps"** to detect scheduling conflicts
 3. Review any overlaps found in the results table
 4. Click **"Export Overlaps"** to download overlap report as CSV
 
-### 3.7 Modifying Timetable
+### 4.7 Modifying Timetable
 1. Click on the **"Modify Timetable"** sub-tab
 2. Click **"Enable Reschedule Mode"**
 3. Select two periods to swap by clicking on them
@@ -124,16 +187,16 @@ Before managing timetables:
 
 ---
 
-## 4. Data Synchronization
+## 5. Data Synchronization
 
-### 4.1 Understanding Sync Status
+### 5.1 Understanding Sync Status
 The sync status indicator shows:
 - **"Synced"** (green): Data is synchronized with Firestore
 - **"Local only"** (yellow): Data exists only in localStorage
 - **"Syncing"** (blue): Operation in progress
 - **"Error"** (red): Synchronization failed
 
-### 4.2 Pushing to Firestore
+### 5.2 Pushing to Firestore
 When you see **"Local only - Push to sync"**:
 1. Make sure a **School** and **Academic Year** are selected
 2. Click the **"Push"** button (green cloud upload icon)
@@ -141,7 +204,7 @@ When you see **"Local only - Push to sync"**:
    `timetables/{schoolId}/years/{academicYear}`
 4. Success message will appear when complete
 
-### 4.3 Loading from Firestore
+### 5.3 Loading from Firestore
 When you select a school and year:
 - If data exists in Firestore, it automatically loads and saves to localStorage
 - If no data in Firestore but localStorage has data, it shows "Local only"
@@ -149,9 +212,9 @@ When you select a school and year:
 
 ---
 
-## 5. Copying Timetable Between Years
+## 6. Copying Timetable Between Years
 
-### 5.1 Copy Year Feature
+### 6.1 Copy Year Feature
 To duplicate a timetable from one academic year to another:
 
 1. Select the **School** you want to work with
@@ -170,9 +233,9 @@ To duplicate a timetable from one academic year to another:
 
 ---
 
-## 6. Data Storage Structure
+## 7. Data Storage Structure
 
-### 6.1 Firestore Collections
+### 7.1 Firestore Collections
 ```
 schools/
   └── {schoolId}/
@@ -198,7 +261,7 @@ timetables/
               └── updatedBy: string
 ```
 
-### 6.2 LocalStorage Keys
+### 7.2 LocalStorage Keys
 - `selectedSchool`: Currently selected school ID
 - `selectedAcademicYear`: Currently selected academic year
 - `schoolTimetable`: Timetable data (JSON)
@@ -209,31 +272,31 @@ timetables/
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-### 7.1 Cannot See Sections
+### 8.1 Cannot See Sections
 - Ensure you have been assigned as **Admin** to at least one section
 - Check that sections exist in the Firestore `schools/{schoolId}/sections` collection
 
-### 7.2 Upload Fails
+### 8.2 Upload Fails
 - Verify Excel/CSV file format matches expected structure
 - Check browser console for error messages
 - Ensure file is not corrupted
 
-### 7.3 Push to Firestore Fails
+### 8.3 Push to Firestore Fails
 - Verify you are signed in
 - Ensure both School and Academic Year are selected
 - Check internet connection
 - Verify you have write permissions
 
-### 7.4 Data Not Loading
+### 8.4 Data Not Loading
 - Check Firestore security rules allow reads
 - Verify school ID and year selection
 - Try refreshing the page
 
 ---
 
-## 8. Keyboard Shortcuts
+## 9. Keyboard Shortcuts
 
 - **Tab Navigation**: Use tabs to switch between sections
 - **Modal Close**: Press Escape to close modals
@@ -241,7 +304,7 @@ timetables/
 
 ---
 
-## 9. Best Practices
+## 10. Best Practices
 
 1. **Always select school and year** before working with timetables
 2. **Push to Firestore regularly** to backup your local changes
@@ -251,6 +314,6 @@ timetables/
 
 ---
 
-## 10. Support
+## 11. Support
 
 For technical issues or feature requests, contact the system administrator.

@@ -1,0 +1,1096 @@
+// School Management System - Principal Interface
+// Manages Teachers, Subjects, Class Sections, and Teacher-Subject Mappings
+
+// Firebase configuration (same as app.js)
+const firebaseConfig = {
+    apiKey: "AIzaSyAFpwi3k7Qth9MiqqRGKstY0Zkj_vrcdFY",
+    authDomain: "edutrack-admin.firebaseapp.com",
+    projectId: "edutrack-admin",
+    storageBucket: "edutrack-admin.firebasestorage.com",
+    messagingSenderId: "193864081571",
+    appId: "1:193864081571:web:7501afde01291f81e61f16"
+};
+
+// Initialize Firebase
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+
+// Global state
+let currentUser = null;
+let selectedSchool = localStorage.getItem('selectedSchool') || '';
+let selectedYear = localStorage.getItem('selectedAcademicYear') || '';
+let allTeachers = [];
+let allSubjects = [];
+let allClassSections = [];
+let allMappings = [];
+let allHistory = [];
+
+// Bootstrap modals
+let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize modals
+    teacherModal = new bootstrap.Modal(document.getElementById('teacherModal'));
+    subjectModal = new bootstrap.Modal(document.getElementById('subjectModal'));
+    classSectionModal = new bootstrap.Modal(document.getElementById('classSectionModal'));
+    mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
+    transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
+
+    // Check auth state
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            currentUser = user;
+            document.getElementById('user-email').textContent = user.email;
+            await initializePage();
+        } else {
+            window.location.href = 'index.html';
+        }
+    });
+
+    // Event listeners for navbar dropdowns
+    document.getElementById('nav-school-select').addEventListener('change', function() {
+        selectedSchool = this.value;
+        localStorage.setItem('selectedSchool', selectedSchool);
+        onContextChange();
+    });
+
+    document.getElementById('nav-year-select').addEventListener('change', function() {
+        selectedYear = this.value;
+        localStorage.setItem('selectedAcademicYear', selectedYear);
+        onContextChange();
+    });
+
+    // Filter event listeners
+    setupFilterListeners();
+
+    // Sign out
+    document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
+});
+
+async function initializePage() {
+    // Load schools for navbar
+    await loadSchoolsForNav();
+    
+    // Restore selections
+    if (selectedSchool) {
+        document.getElementById('nav-school-select').value = selectedSchool;
+    }
+    if (selectedYear) {
+        document.getElementById('nav-year-select').value = selectedYear;
+    }
+    
+    // Load data if context is set
+    if (selectedSchool && selectedYear) {
+        document.getElementById('selectionAlert').style.display = 'none';
+        await loadAllData();
+    }
+}
+
+async function loadSchoolsForNav() {
+    try {
+        const snapshot = await firestore.collection('schools').get();
+        const select = document.getElementById('nav-school-select');
+        let html = '<option value="">Select School</option>';
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            html += `<option value="${doc.id}">${data.schoolName || doc.id}</option>`;
+        });
+        select.innerHTML = html;
+    } catch (error) {
+        console.error('Error loading schools:', error);
+    }
+}
+
+async function onContextChange() {
+    selectedSchool = document.getElementById('nav-school-select').value;
+    selectedYear = document.getElementById('nav-year-select').value;
+    
+    if (selectedSchool && selectedYear) {
+        document.getElementById('selectionAlert').style.display = 'none';
+        await loadAllData();
+    } else {
+        document.getElementById('selectionAlert').style.display = 'block';
+        clearAllTables();
+    }
+}
+
+async function loadAllData() {
+    showLoading();
+    
+    await Promise.all([
+        loadTeachers(),
+        loadSubjects(),
+        loadClassSections(),
+        loadMappings(),
+        loadHistory()
+    ]);
+    
+    updateStats();
+    hideLoading();
+}
+
+function showLoading() {
+    // Could add a loading spinner here
+}
+
+function hideLoading() {
+    // Hide loading spinner
+}
+
+function clearAllTables() {
+    document.getElementById('teachersTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view teachers</td></tr>';
+    document.getElementById('subjectsTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view subjects</td></tr>';
+    document.getElementById('classSectionsTable').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Select school and year to view class sections</td></tr>';
+    document.getElementById('mappingsGrid').innerHTML = `
+        <div class="col-12">
+            <div class="empty-state">
+                <i class="bi bi-diagram-3" style="font-size: 3rem;"></i>
+                <p class="mt-3">Select school and year to view mappings</p>
+            </div>
+        </div>
+    `;
+    document.getElementById('historyTimeline').innerHTML = '<div class="text-center text-muted py-4">Select school and year to view change history</div>';
+    updateStats();
+}
+
+// ============== TEACHERS ==============
+
+async function loadTeachers() {
+    if (!selectedSchool) return;
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('teachers')
+            .orderBy('name')
+            .get();
+        
+        allTeachers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderTeachers();
+        updateTeacherFilterOptions();
+    } catch (error) {
+        console.error('Error loading teachers:', error);
+    }
+}
+
+function renderTeachers() {
+    const filterName = document.getElementById('filterTeacherName').value.toLowerCase();
+    const filterEmail = document.getElementById('filterTeacherEmail').value.toLowerCase();
+    const filterStatus = document.getElementById('filterTeacherStatus').value;
+    
+    let filtered = allTeachers.filter(t => {
+        if (filterName && !t.name?.toLowerCase().includes(filterName)) return false;
+        if (filterEmail && !t.email?.toLowerCase().includes(filterEmail)) return false;
+        if (filterStatus && t.status !== filterStatus) return false;
+        return true;
+    });
+    
+    const tbody = document.getElementById('teachersTable');
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No teachers found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = filtered.map(t => `
+        <tr>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div class="teacher-avatar">${(t.name || 'T').charAt(0).toUpperCase()}</div>
+                    <div>${t.name || 'Unnamed'}</div>
+                </div>
+            </td>
+            <td>${t.email || '-'}</td>
+            <td>${t.phone || '-'}</td>
+            <td>${t.joinDate ? formatDate(t.joinDate) : '-'}</td>
+            <td>
+                <span class="badge ${t.status === 'active' ? 'badge-active' : 'badge-inactive'}">
+                    ${t.status || 'active'}
+                </span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editTeacher('${t.id}')" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning btn-icon me-1" onclick="recordChange('${t.id}', '${t.name}')" title="Record Change">
+                    <i class="bi bi-arrow-left-right"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteTeacher('${t.id}')" title="Delete">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openTeacherModal(teacherId = null) {
+    document.getElementById('teacherForm').reset();
+    document.getElementById('teacherId').value = '';
+    document.getElementById('teacherJoinDate').value = new Date().toISOString().split('T')[0];
+    
+    if (teacherId) {
+        const teacher = allTeachers.find(t => t.id === teacherId);
+        if (teacher) {
+            document.getElementById('teacherModalTitle').textContent = 'Edit Teacher';
+            document.getElementById('teacherId').value = teacher.id;
+            document.getElementById('teacherName').value = teacher.name || '';
+            document.getElementById('teacherEmail').value = teacher.email || '';
+            document.getElementById('teacherPhone').value = teacher.phone || '';
+            document.getElementById('teacherJoinDate').value = teacher.joinDate || '';
+            document.getElementById('teacherStatus').value = teacher.status || 'active';
+            document.getElementById('teacherNotes').value = teacher.notes || '';
+        }
+    } else {
+        document.getElementById('teacherModalTitle').textContent = 'Add Teacher';
+    }
+    
+    teacherModal.show();
+}
+
+function editTeacher(teacherId) {
+    openTeacherModal(teacherId);
+}
+
+async function saveTeacher() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+    
+    const id = document.getElementById('teacherId').value;
+    const data = {
+        name: document.getElementById('teacherName').value.trim(),
+        email: document.getElementById('teacherEmail').value.trim(),
+        phone: document.getElementById('teacherPhone').value.trim(),
+        joinDate: document.getElementById('teacherJoinDate').value,
+        status: document.getElementById('teacherStatus').value,
+        notes: document.getElementById('teacherNotes').value.trim(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email
+    };
+    
+    if (!data.name || !data.email) {
+        alert('Name and Email are required');
+        return;
+    }
+    
+    try {
+        if (id) {
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('teachers').doc(id).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('teachers').add(data);
+        }
+        
+        teacherModal.hide();
+        await loadTeachers();
+        
+        // Record in history if new teacher
+        if (!id) {
+            await recordHistory({
+                type: 'joined',
+                teacherName: data.name,
+                teacherEmail: data.email,
+                details: `New teacher joined: ${data.name}`
+            });
+        }
+    } catch (error) {
+        console.error('Error saving teacher:', error);
+        alert('Error saving teacher: ' + error.message);
+    }
+}
+
+async function deleteTeacher(teacherId) {
+    if (!confirm('Are you sure you want to delete this teacher?')) return;
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('teachers').doc(teacherId).delete();
+        await loadTeachers();
+    } catch (error) {
+        console.error('Error deleting teacher:', error);
+        alert('Error deleting teacher: ' + error.message);
+    }
+}
+
+function clearTeacherFilters() {
+    document.getElementById('filterTeacherName').value = '';
+    document.getElementById('filterTeacherEmail').value = '';
+    document.getElementById('filterTeacherStatus').value = '';
+    renderTeachers();
+}
+
+// ============== SUBJECTS ==============
+
+async function loadSubjects() {
+    if (!selectedSchool) return;
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('subjects')
+            .orderBy('code')
+            .get();
+        
+        allSubjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderSubjects();
+        updateSubjectFilterOptions();
+        updateMappingSubjectOptions();
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+    }
+}
+
+function renderSubjects() {
+    const filterName = document.getElementById('filterSubjectName').value.toLowerCase();
+    const filterCode = document.getElementById('filterSubjectCode').value;
+    
+    let filtered = allSubjects.filter(s => {
+        if (filterName && !s.name?.toLowerCase().includes(filterName)) return false;
+        if (filterCode && s.code !== filterCode) return false;
+        return true;
+    });
+    
+    const tbody = document.getElementById('subjectsTable');
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No subjects found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = filtered.map(s => `
+        <tr>
+            <td><code>${s.code || '-'}</code></td>
+            <td>${s.name || '-'}</td>
+            <td>${s.description || '-'}</td>
+            <td>${s.periodsPerWeek || '-'}</td>
+            <td>
+                <span class="badge ${s.status === 'active' ? 'badge-active' : 'badge-inactive'}">
+                    ${s.status || 'active'}
+                </span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editSubject('${s.id}')">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteSubject('${s.id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openSubjectModal(subjectId = null) {
+    document.getElementById('subjectForm').reset();
+    document.getElementById('subjectId').value = '';
+    
+    if (subjectId) {
+        const subject = allSubjects.find(s => s.id === subjectId);
+        if (subject) {
+            document.getElementById('subjectModalTitle').textContent = 'Edit Subject';
+            document.getElementById('subjectId').value = subject.id;
+            document.getElementById('subjectCode').value = subject.code || '';
+            document.getElementById('subjectName').value = subject.name || '';
+            document.getElementById('subjectDescription').value = subject.description || '';
+            document.getElementById('subjectPeriods').value = subject.periodsPerWeek || 5;
+            document.getElementById('subjectStatus').value = subject.status || 'active';
+        }
+    } else {
+        document.getElementById('subjectModalTitle').textContent = 'Add Subject';
+    }
+    
+    subjectModal.show();
+}
+
+function editSubject(subjectId) {
+    openSubjectModal(subjectId);
+}
+
+async function saveSubject() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+    
+    const id = document.getElementById('subjectId').value;
+    const data = {
+        code: document.getElementById('subjectCode').value.trim().toUpperCase(),
+        name: document.getElementById('subjectName').value.trim(),
+        description: document.getElementById('subjectDescription').value.trim(),
+        periodsPerWeek: parseInt(document.getElementById('subjectPeriods').value) || 5,
+        status: document.getElementById('subjectStatus').value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email
+    };
+    
+    if (!data.code || !data.name) {
+        alert('Subject Code and Name are required');
+        return;
+    }
+    
+    try {
+        if (id) {
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('subjects').doc(id).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('subjects').add(data);
+        }
+        
+        subjectModal.hide();
+        await loadSubjects();
+    } catch (error) {
+        console.error('Error saving subject:', error);
+        alert('Error saving subject: ' + error.message);
+    }
+}
+
+async function deleteSubject(subjectId) {
+    if (!confirm('Are you sure you want to delete this subject?')) return;
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('subjects').doc(subjectId).delete();
+        await loadSubjects();
+    } catch (error) {
+        console.error('Error deleting subject:', error);
+        alert('Error deleting subject: ' + error.message);
+    }
+}
+
+function clearSubjectFilters() {
+    document.getElementById('filterSubjectName').value = '';
+    document.getElementById('filterSubjectCode').value = '';
+    renderSubjects();
+}
+
+// ============== CLASS SECTIONS ==============
+
+async function loadClassSections() {
+    if (!selectedSchool || !selectedYear) return;
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('classSections')
+            .where('academicYear', '==', selectedYear)
+            .orderBy('grade')
+            .orderBy('section')
+            .get();
+        
+        allClassSections = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderClassSections();
+        updateMappingClassOptions();
+    } catch (error) {
+        console.error('Error loading class sections:', error);
+    }
+}
+
+function renderClassSections() {
+    const filterGrade = document.getElementById('filterClassGrade').value;
+    const filterSection = document.getElementById('filterClassSection').value.toLowerCase();
+    
+    let filtered = allClassSections.filter(cs => {
+        if (filterGrade && cs.grade !== filterGrade) return false;
+        if (filterSection && !cs.section?.toLowerCase().includes(filterSection)) return false;
+        return true;
+    });
+    
+    const tbody = document.getElementById('classSectionsTable');
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No class sections found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = filtered.map(cs => {
+        const classTeacher = allTeachers.find(t => t.email === cs.classTeacherEmail);
+        return `
+        <tr>
+            <td><strong>${cs.grade || '-'}-${cs.section || '-'}</strong></td>
+            <td>Grade ${cs.grade || '-'}</td>
+            <td>${cs.section || '-'}</td>
+            <td>${classTeacher ? classTeacher.name : (cs.classTeacherEmail || '-')}</td>
+            <td>${cs.roomNumber || '-'}</td>
+            <td>${cs.studentCount || '-'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editClassSection('${cs.id}')">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteClassSection('${cs.id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `}).join('');
+}
+
+function openClassSectionModal(classSectionId = null) {
+    if (!selectedYear) {
+        alert('Please select an academic year first');
+        return;
+    }
+    
+    document.getElementById('classSectionForm').reset();
+    document.getElementById('classSectionId').value = '';
+    document.getElementById('classAcademicYear').value = selectedYear;
+    
+    // Populate class teacher dropdown
+    const teacherSelect = document.getElementById('classTeacher');
+    teacherSelect.innerHTML = '<option value="">Select Class Teacher</option>' +
+        allTeachers.filter(t => t.status === 'active').map(t => 
+            `<option value="${t.email}">${t.name}</option>`
+        ).join('');
+    
+    if (classSectionId) {
+        const cs = allClassSections.find(c => c.id === classSectionId);
+        if (cs) {
+            document.getElementById('classSectionModalTitle').textContent = 'Edit Class Section';
+            document.getElementById('classSectionId').value = cs.id;
+            document.getElementById('classGrade').value = cs.grade || '';
+            document.getElementById('classSection').value = cs.section || '';
+            document.getElementById('classTeacher').value = cs.classTeacherEmail || '';
+            document.getElementById('classRoom').value = cs.roomNumber || '';
+            document.getElementById('classStudents').value = cs.studentCount || '';
+        }
+    } else {
+        document.getElementById('classSectionModalTitle').textContent = 'Add Class Section';
+    }
+    
+    classSectionModal.show();
+}
+
+function editClassSection(classSectionId) {
+    openClassSectionModal(classSectionId);
+}
+
+async function saveClassSection() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    const id = document.getElementById('classSectionId').value;
+    const grade = document.getElementById('classGrade').value;
+    const section = document.getElementById('classSection').value.trim();
+    const classTeacherEmail = document.getElementById('classTeacher').value;
+    
+    const data = {
+        grade: grade,
+        section: section.toUpperCase(),
+        classTeacherEmail: classTeacherEmail,
+        roomNumber: document.getElementById('classRoom').value.trim(),
+        studentCount: parseInt(document.getElementById('classStudents').value) || 0,
+        academicYear: selectedYear,
+        fullName: `${grade}-${section.toUpperCase()}`,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email
+    };
+    
+    if (!data.grade || !data.section) {
+        alert('Grade and Section are required');
+        return;
+    }
+    
+    try {
+        if (id) {
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('classSections').doc(id).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('classSections').add(data);
+        }
+        
+        classSectionModal.hide();
+        await loadClassSections();
+    } catch (error) {
+        console.error('Error saving class section:', error);
+        alert('Error saving class section: ' + error.message);
+    }
+}
+
+async function deleteClassSection(classSectionId) {
+    if (!confirm('Are you sure you want to delete this class section?')) return;
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('classSections').doc(classSectionId).delete();
+        await loadClassSections();
+    } catch (error) {
+        console.error('Error deleting class section:', error);
+        alert('Error deleting class section: ' + error.message);
+    }
+}
+
+function clearClassSectionFilters() {
+    document.getElementById('filterClassGrade').value = '';
+    document.getElementById('filterClassSection').value = '';
+    renderClassSections();
+}
+
+// ============== MAPPINGS ==============
+
+async function loadMappings() {
+    if (!selectedSchool || !selectedYear) return;
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('teacherSubjectMappings')
+            .where('academicYear', '==', selectedYear)
+            .where('status', '==', 'active')
+            .get();
+        
+        allMappings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderMappings();
+    } catch (error) {
+        console.error('Error loading mappings:', error);
+    }
+}
+
+function renderMappings() {
+    const filterTeacher = document.getElementById('filterMapTeacher').value;
+    const filterSubject = document.getElementById('filterMapSubject').value;
+    const filterClass = document.getElementById('filterMapClass').value;
+    
+    let filtered = allMappings.filter(m => {
+        if (filterTeacher && m.teacherEmail !== filterTeacher) return false;
+        if (filterSubject && m.subjectCode !== filterSubject) return false;
+        if (filterClass && !m.classSections?.includes(filterClass)) return false;
+        return true;
+    });
+    
+    const container = document.getElementById('mappingsGrid');
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="empty-state">
+                    <i class="bi bi-diagram-3" style="font-size: 3rem;"></i>
+                    <p class="mt-3">No mappings found for this academic year</p>
+                    <button class="btn btn-primary btn-sm mt-2" onclick="openMappingModal()">
+                        <i class="bi bi-plus-lg me-2"></i>Create First Mapping
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filtered.map(m => {
+        const teacher = allTeachers.find(t => t.email === m.teacherEmail);
+        const subject = allSubjects.find(s => s.code === m.subjectCode);
+        const classNames = m.classSections?.map(cs => {
+            const csData = allClassSections.find(c => c.id === cs);
+            return csData ? `${csData.grade}-${csData.section}` : cs;
+        }).join(', ') || '-';
+        
+        return `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card mapping-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">${subject ? subject.name : m.subjectCode}</h6>
+                        <span class="badge badge-active">Active</span>
+                    </div>
+                    <p class="card-text">
+                        <i class="bi bi-person me-2 text-primary"></i>${teacher ? teacher.name : m.teacherEmail}<br>
+                        <i class="bi bi-grid-3x3 me-2 text-secondary"></i>${classNames}<br>
+                        <small class="text-muted">${m.academicYear}</small>
+                    </p>
+                    <div class="d-flex justify-content-end">
+                        <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editMapping('${m.id}')">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteMapping('${m.id}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `}).join('');
+}
+
+function openMappingModal(mappingId = null) {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    document.getElementById('mappingForm').reset();
+    document.getElementById('mappingId').value = '';
+    document.getElementById('mapAcademicYear').value = selectedYear;
+    document.getElementById('mapEffectiveFrom').value = new Date().toISOString().split('T')[0];
+    
+    // Populate dropdowns
+    const teacherSelect = document.getElementById('mapTeacher');
+    teacherSelect.innerHTML = '<option value="">Select Teacher</option>' +
+        allTeachers.filter(t => t.status === 'active').map(t => 
+            `<option value="${t.email}">${t.name}</option>`
+        ).join('');
+    
+    const subjectSelect = document.getElementById('mapSubject');
+    subjectSelect.innerHTML = '<option value="">Select Subject</option>' +
+        allSubjects.filter(s => s.status === 'active').map(s => 
+            `<option value="${s.code}">${s.name} (${s.code})</option>`
+        ).join('');
+    
+    // Populate class sections checkboxes
+    const classContainer = document.getElementById('mapClassSections');
+    if (allClassSections.length === 0) {
+        classContainer.innerHTML = '<div class="text-muted small">No class sections available for this year</div>';
+    } else {
+        classContainer.innerHTML = allClassSections.map(cs => `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${cs.id}" id="class_${cs.id}" name="mappingClasses">
+                <label class="form-check-label" for="class_${cs.id}">
+                    Grade ${cs.grade}-${cs.section}
+                </label>
+            </div>
+        `).join('');
+    }
+    
+    if (mappingId) {
+        const mapping = allMappings.find(m => m.id === mappingId);
+        if (mapping) {
+            document.getElementById('mappingModalTitle').textContent = 'Edit Mapping';
+            document.getElementById('mappingId').value = mapping.id;
+            document.getElementById('mapTeacher').value = mapping.teacherEmail || '';
+            document.getElementById('mapSubject').value = mapping.subjectCode || '';
+            document.getElementById('mapEffectiveFrom').value = mapping.effectiveFrom || '';
+            document.getElementById('mapNotes').value = mapping.notes || '';
+            
+            // Check the class section boxes
+            if (mapping.classSections) {
+                mapping.classSections.forEach(csId => {
+                    const checkbox = document.getElementById(`class_${csId}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+        }
+    } else {
+        document.getElementById('mappingModalTitle').textContent = 'Create Teacher-Subject Mapping';
+    }
+    
+    mappingModal.show();
+}
+
+function editMapping(mappingId) {
+    openMappingModal(mappingId);
+}
+
+async function saveMapping() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    const id = document.getElementById('mappingId').value;
+    const teacherEmail = document.getElementById('mapTeacher').value;
+    const subjectCode = document.getElementById('mapSubject').value;
+    
+    // Get selected class sections
+    const selectedClasses = Array.from(document.querySelectorAll('input[name="mappingClasses"]:checked'))
+        .map(cb => cb.value);
+    
+    if (!teacherEmail || !subjectCode || selectedClasses.length === 0) {
+        alert('Please select teacher, subject, and at least one class section');
+        return;
+    }
+    
+    const teacher = allTeachers.find(t => t.email === teacherEmail);
+    const subject = allSubjects.find(s => s.code === subjectCode);
+    
+    const data = {
+        teacherEmail: teacherEmail,
+        teacherName: teacher ? teacher.name : teacherEmail,
+        subjectCode: subjectCode,
+        subjectName: subject ? subject.name : subjectCode,
+        classSections: selectedClasses,
+        academicYear: selectedYear,
+        effectiveFrom: document.getElementById('mapEffectiveFrom').value,
+        notes: document.getElementById('mapNotes').value.trim(),
+        status: 'active',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email
+    };
+    
+    try {
+        if (id) {
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('teacherSubjectMappings').doc(id).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('teacherSubjectMappings').add(data);
+        }
+        
+        mappingModal.hide();
+        await loadMappings();
+    } catch (error) {
+        console.error('Error saving mapping:', error);
+        alert('Error saving mapping: ' + error.message);
+    }
+}
+
+async function deleteMapping(mappingId) {
+    if (!confirm('Are you sure you want to delete this mapping?')) return;
+    
+    try {
+        // Soft delete - mark as inactive
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('teacherSubjectMappings').doc(mappingId).update({
+                status: 'inactive',
+                endedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                endedBy: currentUser.email
+            });
+        await loadMappings();
+    } catch (error) {
+        console.error('Error deleting mapping:', error);
+        alert('Error deleting mapping: ' + error.message);
+    }
+}
+
+function clearMappingFilters() {
+    document.getElementById('filterMapTeacher').value = '';
+    document.getElementById('filterMapSubject').value = '';
+    document.getElementById('filterMapClass').value = '';
+    renderMappings();
+}
+
+// ============== HISTORY ==============
+
+async function loadHistory() {
+    if (!selectedSchool) return;
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('teacherHistory')
+            .orderBy('date', 'desc')
+            .limit(50)
+            .get();
+        
+        allHistory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderHistory('all');
+    } catch (error) {
+        console.error('Error loading history:', error);
+    }
+}
+
+function renderHistory(filter = 'all') {
+    const container = document.getElementById('historyTimeline');
+    
+    let filtered = allHistory;
+    if (filter !== 'all') {
+        filtered = allHistory.filter(h => h.type === filter);
+    }
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-4">No history records found</div>';
+        return;
+    }
+    
+    const typeIcons = {
+        'joined': 'bi-person-plus text-success',
+        'left': 'bi-person-x text-danger',
+        'transferred_in': 'bi-arrow-right-circle text-primary',
+        'transferred_out': 'bi-arrow-left-circle text-warning',
+        'promoted': 'bi-arrow-up-circle text-info',
+        'retired': 'bi-person-check text-secondary'
+    };
+    
+    container.innerHTML = filtered.map(h => `
+        <div class="history-item">
+            <div class="d-flex justify-content-between">
+                <strong><i class="bi ${typeIcons[h.type] || 'bi-circle'} me-2"></i>${formatType(h.type)}</strong>
+                <small class="text-muted">${formatDate(h.date)}</small>
+            </div>
+            <p class="mb-1"><strong>${h.teacherName}</strong></p>
+            ${h.previousSchool ? `<p class="mb-1 small text-muted">From: ${h.previousSchool}</p>` : ''}
+            ${h.nextSchool ? `<p class="mb-1 small text-muted">To: ${h.nextSchool}</p>` : ''}
+            ${h.notes ? `<p class="mb-0 small">${h.notes}</p>` : ''}
+            <small class="text-muted">Year: ${h.academicYear || selectedYear}</small>
+        </div>
+    `).join('');
+}
+
+function filterHistory(type) {
+    renderHistory(type);
+}
+
+function recordChange(teacherId, teacherName) {
+    document.getElementById('transferForm').reset();
+    document.getElementById('transferTeacherId').value = teacherId;
+    document.getElementById('transferTeacherName').value = teacherName;
+    document.getElementById('transferDate').value = new Date().toISOString().split('T')[0];
+    transferModal.show();
+}
+
+async function saveTransfer() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    const teacherId = document.getElementById('transferTeacherId').value;
+    const type = document.getElementById('transferType').value;
+    
+    if (!type) {
+        alert('Please select a change type');
+        return;
+    }
+    
+    const data = {
+        teacherId: teacherId,
+        teacherName: document.getElementById('transferTeacherName').value,
+        type: type,
+        date: document.getElementById('transferDate').value,
+        previousSchool: type === 'transferred_in' ? document.getElementById('transferSchool').value : null,
+        nextSchool: type === 'transferred_out' ? document.getElementById('transferSchool').value : null,
+        notes: document.getElementById('transferNotes').value.trim(),
+        academicYear: selectedYear,
+        recordedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        recordedBy: currentUser.email
+    };
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('teacherHistory').add(data);
+        
+        // Update teacher status if needed
+        const teacherRef = firestore.collection('schools').doc(selectedSchool)
+            .collection('teachers').doc(teacherId);
+        
+        if (type === 'left' || type === 'transferred_out' || type === 'retired') {
+            await teacherRef.update({ status: 'inactive' });
+        } else if (type === 'joined' || type === 'transferred_in') {
+            await teacherRef.update({ status: 'active' });
+        }
+        
+        transferModal.hide();
+        await Promise.all([loadHistory(), loadTeachers()]);
+    } catch (error) {
+        console.error('Error recording change:', error);
+        alert('Error recording change: ' + error.message);
+    }
+}
+
+async function recordHistory(data) {
+    if (!selectedSchool) return;
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('teacherHistory').add({
+                ...data,
+                academicYear: selectedYear,
+                recordedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                recordedBy: currentUser.email
+            });
+        await loadHistory();
+    } catch (error) {
+        console.error('Error recording history:', error);
+    }
+}
+
+// ============== HELPERS ==============
+
+function updateStats() {
+    document.getElementById('statTeachers').textContent = allTeachers.filter(t => t.status === 'active').length;
+    document.getElementById('statSubjects').textContent = allSubjects.filter(s => s.status === 'active').length;
+    document.getElementById('statClassSections').textContent = allClassSections.length;
+    document.getElementById('statMappings').textContent = allMappings.length;
+}
+
+function updateTeacherFilterOptions() {
+    // Update mapping teacher filter
+    const filter = document.getElementById('filterMapTeacher');
+    filter.innerHTML = '<option value="">Filter by Teacher</option>' +
+        allTeachers.filter(t => t.status === 'active').map(t => 
+            `<option value="${t.email}">${t.name}</option>`
+        ).join('');
+}
+
+function updateSubjectFilterOptions() {
+    const filter = document.getElementById('filterSubjectCode');
+    filter.innerHTML = '<option value="">Filter by code</option>' +
+        allSubjects.map(s => `<option value="${s.code}">${s.code}</option>`).join('');
+    
+    // Update mapping subject filter
+    const mapFilter = document.getElementById('filterMapSubject');
+    mapFilter.innerHTML = '<option value="">Filter by Subject</option>' +
+        allSubjects.filter(s => s.status === 'active').map(s => 
+            `<option value="${s.code}">${s.name}</option>`
+        ).join('');
+}
+
+function updateMappingSubjectOptions() {
+    // Handled in updateSubjectFilterOptions
+}
+
+function updateMappingClassOptions() {
+    const filter = document.getElementById('filterMapClass');
+    filter.innerHTML = '<option value="">Filter by Class</option>' +
+        allClassSections.map(cs => 
+            `<option value="${cs.id}">Grade ${cs.grade}-${cs.section}</option>`
+        ).join('');
+}
+
+function setupFilterListeners() {
+    // Teacher filters
+    document.getElementById('filterTeacherName').addEventListener('input', renderTeachers);
+    document.getElementById('filterTeacherEmail').addEventListener('input', renderTeachers);
+    document.getElementById('filterTeacherStatus').addEventListener('change', renderTeachers);
+    
+    // Subject filters
+    document.getElementById('filterSubjectName').addEventListener('input', renderSubjects);
+    document.getElementById('filterSubjectCode').addEventListener('change', renderSubjects);
+    
+    // Class section filters
+    document.getElementById('filterClassGrade').addEventListener('change', renderClassSections);
+    document.getElementById('filterClassSection').addEventListener('input', renderClassSections);
+    
+    // Mapping filters
+    document.getElementById('filterMapTeacher').addEventListener('change', renderMappings);
+    document.getElementById('filterMapSubject').addEventListener('change', renderMappings);
+    document.getElementById('filterMapClass').addEventListener('change', renderMappings);
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatType(type) {
+    const types = {
+        'joined': 'Joined',
+        'left': 'Left School',
+        'transferred_in': 'Transferred In',
+        'transferred_out': 'Transferred Out',
+        'promoted': 'Promoted',
+        'retired': 'Retired'
+    };
+    return types[type] || type;
+}
+
+// ============== NAVIGATION FROM OTHER PAGES ==============
+
+// Check for passed parameters in URL
+const urlParams = new URLSearchParams(window.location.search);
+const passedSchool = urlParams.get('school');
+const passedYear = urlParams.get('year');
+
+if (passedSchool) {
+    localStorage.setItem('selectedSchool', passedSchool);
+    selectedSchool = passedSchool;
+}
+if (passedYear) {
+    localStorage.setItem('selectedAcademicYear', passedYear);
+    selectedYear = passedYear;
+}

@@ -207,6 +207,7 @@
                             <li><a href="#overview"><i class="bi bi-house-door"></i> Overview</a></li>
                             <li><a href="#getting-started"><i class="bi bi-power"></i> Getting Started</a></li>
                             <li><a href="#teacher-assignments"><i class="bi bi-people"></i> Managing Teachers</a></li>
+                            <li><a href="#school-management"><i class="bi bi-gear"></i> School Management</a></li>
                             <li><a href="#timetables"><i class="bi bi-calendar-week"></i> Timetables</a></li>
                             <li><a href="#roles"><i class="bi bi-shield-check"></i> Understanding Roles</a></li>
                             <li><a href="#best-practices"><i class="bi bi-star"></i> Best Practices</a></li>
@@ -221,6 +222,9 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
+                            <a href="management.html" class="quick-link">
+                                <i class="bi bi-gear"></i> School Management
+                            </a>
                             <a href="index.html" class="quick-link">
                                 <i class="bi bi-people"></i> Manage Teachers
                             </a>
@@ -349,6 +353,84 @@
                                 <li><strong>Filter:</strong> Use the dropdown filters to filter by Section, Teacher, Role, or Assigned By</li>
                                 <li><strong>Clear Filters:</strong> Click "Clear Filters" to reset all filters</li>
                             </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- School Management -->
+                <section id="school-management" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-gear me-2"></i>School Management</h4>
+                        </div>
+                        <div class="card-body">
+                            <p>The School Management page provides comprehensive tools for managing your school's master data:</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-person-badge text-primary me-2"></i>Teachers</h6>
+                                    <ul class="small">
+                                        <li>Add new teachers with contact details</li>
+                                        <li>Track join dates and status (active/inactive/on leave)</li>
+                                        <li>Record teacher changes (joins, transfers, exits)</li>
+                                        <li>View teacher history timeline</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-book text-primary me-2"></i>Subjects</h6>
+                                    <ul class="small">
+                                        <li>Create subjects with unique codes</li>
+                                        <li>Set periods per week for each subject</li>
+                                        <li>Add descriptions for reference</li>
+                                        <li>Activate/deactivate subjects</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-grid-3x3 text-primary me-2"></i>Class Sections</h6>
+                                    <ul class="small">
+                                        <li>Create class sections (e.g., 1-A, 2-B)</li>
+                                        <li>Assign class teachers</li>
+                                        <li>Set room numbers and student counts</li>
+                                        <li>Organized by academic year</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-diagram-3 text-primary me-2"></i>Teacher-Subject Mappings</h6>
+                                    <ul class="small">
+                                        <li>Map teachers to subjects they teach</li>
+                                        <li>Assign multiple class sections per mapping</li>
+                                        <li>Track effective dates for mid-year changes</li>
+                                        <li>View all mappings in card layout</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <h5 class="mt-4">Managing Mid-Year Teacher Changes</h5>
+                            <ol>
+                                <li>Go to <strong>School Management</strong> page</li>
+                                <li>Click on the <strong>"Teachers"</strong> tab</li>
+                                <li>Find the teacher and click the <strong>transfer icon</strong> (↔)</li>
+                                <li>Select change type:
+                                    <ul>
+                                        <li><strong>Transferred In</strong> - Teacher joining from another school</li>
+                                        <li><strong>Transferred Out</strong> - Teacher moving to another school</li>
+                                        <li><strong>Left</strong> - Teacher leaving the school</li>
+                                        <li><strong>Promoted</strong> - Teacher promoted to new role</li>
+                                    </ul>
+                                </li>
+                                <li>Enter effective date and any notes</li>
+                                <li>Click <strong>"Record Change"</strong></li>
+                            </ol>
+
+                            <div class="tip-box">
+                                <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                                <strong>Academic Year Isolation:</strong> Each academic year has its own set of class sections and teacher-subject mappings. When you create a new year, previous year data is preserved for reference.
+                            </div>
+
+                            <div class="warning-box">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                                <strong>Important:</strong> Teacher-Subject mappings are specific to the academic year selected in the navbar. Always verify you're working with the correct year before making changes.
+                            </div>
                         </div>
                     </div>
                 </section>
