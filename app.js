@@ -56,7 +56,8 @@ const elements = {
     filterRole: document.getElementById('filter-role'),
     filterAssignedBy: document.getElementById('filter-assignedby'),
     clearFilters: document.getElementById('clear-filters'),
-    navSchoolSelect: document.getElementById('nav-school-select')
+    navSchoolSelect: document.getElementById('nav-school-select'),
+    navYearSelect: document.getElementById('nav-year-select')
 };
 
 // Authentication state listener
@@ -99,7 +100,8 @@ async function initializeApp() {
 async function loadNavSchools() {
     try {
         const snapshot = await firestore.collection('schools').get();
-        const select = elements.navSchoolSelect;
+        const schoolSelect = elements.navSchoolSelect;
+        const yearSelect = elements.navYearSelect;
         
         let optionsHtml = '<option value="">Select School</option>';
         snapshot.docs.forEach(doc => {
@@ -108,18 +110,25 @@ async function loadNavSchools() {
             optionsHtml += `<option value="${doc.id}">${schoolName}</option>`;
         });
         
-        select.innerHTML = optionsHtml;
+        schoolSelect.innerHTML = optionsHtml;
         
-        // Restore selected school from localStorage
+        // Restore selections from localStorage
         const savedSchool = localStorage.getItem('selectedSchool');
-        if (savedSchool) {
-            select.value = savedSchool;
-        }
+        const savedYear = localStorage.getItem('selectedAcademicYear');
+        if (savedSchool) schoolSelect.value = savedSchool;
+        if (savedYear && yearSelect) yearSelect.value = savedYear;
         
-        // Save selection on change
-        select.addEventListener('change', function() {
+        // Save school selection on change
+        schoolSelect.addEventListener('change', function() {
             localStorage.setItem('selectedSchool', this.value);
         });
+        
+        // Save year selection on change
+        if (yearSelect) {
+            yearSelect.addEventListener('change', function() {
+                localStorage.setItem('selectedAcademicYear', this.value);
+            });
+        }
     } catch (error) {
         console.error('Load schools for nav:', error);
     }

@@ -78,10 +78,11 @@
             const hasLocalTimetable = !!localStorage.getItem('schoolTimetable');
             const hasLocalHolidays = !!localStorage.getItem('schoolHolidays');
             const selectedSchool = localStorage.getItem('selectedSchool');
+            const selectedYear = localStorage.getItem('selectedAcademicYear');
             
-            if (!selectedSchool) {
+            if (!selectedSchool || !selectedYear) {
                 loadFromLocalStorage();
-                updateSyncStatus('local-only', 'Select a school');
+                updateSyncStatus('local-only', 'Select school and year');
                 showPushButton();
                 setupTabs();
                 setupEventListeners();
@@ -107,7 +108,7 @@
                 saveTeacherSubjectMapToStorage();
                 localStorage.setItem('currentYear', state.currentYear);
                 
-                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
+                updateSyncStatus('synced', `${selectedSchool} | ${selectedYear}`);
             } else if (hasLocalTimetable) {
                 // No Firestore data but localStorage has data
                 loadFromLocalStorage();
@@ -131,7 +132,8 @@
         async function loadNavSchools() {
             try {
                 const snapshot = await firestore.collection('schools').get();
-                const select = document.getElementById('nav-school-select');
+                const schoolSelect = document.getElementById('nav-school-select');
+                const yearSelect = document.getElementById('nav-year-select');
                 
                 let optionsHtml = '<option value="">Select School</option>';
                 snapshot.docs.forEach(doc => {
@@ -140,30 +142,39 @@
                     optionsHtml += `<option value="${doc.id}">${schoolName}</option>`;
                 });
                 
-                select.innerHTML = optionsHtml;
+                schoolSelect.innerHTML = optionsHtml;
                 
-                // Restore selected school from localStorage
+                // Restore selections from localStorage
                 const savedSchool = localStorage.getItem('selectedSchool');
-                if (savedSchool) {
-                    select.value = savedSchool;
-                }
+                const savedYear = localStorage.getItem('selectedAcademicYear');
+                if (savedSchool) schoolSelect.value = savedSchool;
+                if (savedYear) yearSelect.value = savedYear;
                 
-                // Save selection on change and reload
-                select.addEventListener('change', async function() {
+                // Save school selection on change and reload
+                schoolSelect.addEventListener('change', async function() {
                     localStorage.setItem('selectedSchool', this.value);
-                    if (this.value) {
-                        await reloadForSchool();
-                    }
+                    await reloadForSchoolAndYear();
+                });
+                
+                // Save year selection on change and reload
+                yearSelect.addEventListener('change', async function() {
+                    localStorage.setItem('selectedAcademicYear', this.value);
+                    await reloadForSchoolAndYear();
                 });
             } catch (error) {
                 console.error('Load schools for nav:', error);
             }
         }
 
-        // Reload data when school changes
-        async function reloadForSchool() {
+        // Reload data when school or year changes
+        async function reloadForSchoolAndYear() {
             const selectedSchool = localStorage.getItem('selectedSchool');
-            if (!selectedSchool) return;
+            const selectedYear = localStorage.getItem('selectedAcademicYear');
+            
+            if (!selectedSchool || !selectedYear) {
+                updateSyncStatus('local-only', 'Select school and year');
+                return;
+            }
             
             updateSyncStatus('syncing', 'Loading...');
             const firestoreData = await loadFromFirestore();
@@ -181,7 +192,7 @@
                 saveTeacherSubjectMapToStorage();
                 localStorage.setItem('currentYear', state.currentYear);
                 
-                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
+                updateSyncStatus('synced', `${selectedSchool} | ${selectedYear}`);
                 hidePushButton();
             } else {
                 loadFromLocalStorage();
@@ -195,10 +206,15 @@
         // Load data from Firestore
         async function loadFromFirestore() {
             const selectedSchool = localStorage.getItem('selectedSchool');
-            if (!selectedSchool) return null;
+            const selectedYear = localStorage.getItem('selectedAcademicYear');
+            if (!selectedSchool || !selectedYear) return null;
             
             try {
-                const doc = await firestore.collection('timetables').doc(selectedSchool).get();
+                const doc = await firestore.collection('timetables')
+                    .doc(selectedSchool)
+                    .collection('years')
+                    .doc(selectedYear)
+                    .get();
                 if (doc.exists) {
                     return doc.data();
                 }
@@ -217,8 +233,10 @@
             }
 
             const selectedSchool = localStorage.getItem('selectedSchool');
-            if (!selectedSchool) {
-                alert('Please select a school first');
+            const selectedYear = localStorage.getItem('selectedAcademicYear');
+            
+            if (!selectedSchool || !selectedYear) {
+                alert('Please select a school and academic year first');
                 return;
             }
 
@@ -232,15 +250,20 @@
                     teacherSubjectMap: state.teacherSubjectMap,
                     currentYear: state.currentYear,
                     schoolId: selectedSchool,
+                    academicYear: selectedYear,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: currentUser.email
                 };
 
-                await firestore.collection('timetables').doc(selectedSchool).set(dataToPush);
+                await firestore.collection('timetables')
+                    .doc(selectedSchool)
+                    .collection('years')
+                    .doc(selectedYear)
+                    .set(dataToPush);
                 
-                updateSyncStatus('synced', 'Synced: ' + selectedSchool);
+                updateSyncStatus('synced', `${selectedSchool} | ${selectedYear}`);
                 hidePushButton();
-                alert('Timetable pushed to Firestore successfully!');
+                alert(`Timetable for ${selectedYear} pushed to Firestore successfully!`);
             } catch (error) {
                 console.error('Error pushing to Firestore:', error);
                 updateSyncStatus('error', 'Sync failed');
@@ -304,11 +327,46 @@
             }
         }
         
-        // Save timetable to localStorage
-        function saveTimetableToStorage() {
+        // Save timetable to localStorage with academic year
+        function saveTimetableToStorage(academicYear) {
             if (state.timetableData) {
                 localStorage.setItem('schoolTimetable', JSON.stringify(state.timetableData));
+                if (academicYear) {
+                    localStorage.setItem('timetableAcademicYear', academicYear);
+                }
             }
+        }
+        
+        // Prompt for academic year before upload
+        function promptForAcademicYear() {
+            // Get current selection from navbar
+            const navYearSelect = document.getElementById('nav-year-select');
+            const selectedYear = navYearSelect ? navYearSelect.value : '';
+            
+            if (!selectedYear) {
+                // If no year selected in navbar, prompt user
+                const years = ['2024-25', '2025-26', '2026-27', '2027-28'];
+                const yearOptions = years.map((y, i) => `${i + 1}. ${y}`).join('\n');
+                const input = prompt(`Select academic year for this timetable:\n${yearOptions}\n\nEnter number (1-4) or type the year (e.g., 2025-26):`, '2');
+                
+                if (!input) return null; // User cancelled
+                
+                // Parse input
+                const num = parseInt(input);
+                if (!isNaN(num) && num >= 1 && num <= 4) {
+                    return years[num - 1];
+                } else if (years.includes(input)) {
+                    return input;
+                } else {
+                    // Try to match format
+                    const matched = years.find(y => y === input.trim());
+                    if (matched) return matched;
+                    alert('Invalid year selection. Please try again.');
+                    return promptForAcademicYear();
+                }
+            }
+            
+            return selectedYear;
         }
         
         // Save holidays to localStorage
@@ -680,21 +738,40 @@
             assignTeacherIdsInTimetableData();
             autoFillMissingSubjectsFromTeacherMap();
             
-            // Save to localStorage
-            saveTimetableToStorage();
+            // Prompt for academic year before saving
+            const academicYear = promptForAcademicYear();
+            if (!academicYear) {
+                alert('Academic year is required. Please select a year to save the timetable.');
+                return;
+            }
+            
+            // Update navbar selection if different
+            const navYearSelect = document.getElementById('nav-year-select');
+            if (navYearSelect) navYearSelect.value = academicYear;
+            localStorage.setItem('selectedAcademicYear', academicYear);
+            
+            // Save to localStorage with academic year
+            saveTimetableToStorage(academicYear);
             
             // Update UI
             updateTimetableSummary();
             renderTimetable();
             
             // Show upload status
-            document.getElementById('uploadStatus').style.display = 'block';
-            document.getElementById('uploadDetails').innerHTML = `
-                <p><i class="fas fa-check-circle" style="color: var(--success-color);"></i> Timetable uploaded successfully!</p>
-                <p>Processed ${processedCount} classes.</p>
-            `;
+            const uploadDetails = document.getElementById('uploadDetails');
+            if (uploadDetails) {
+                uploadDetails.innerHTML = `
+                    <p><i class="fas fa-check-circle" style="color: var(--success-color);"></i> Timetable uploaded successfully!</p>
+                    <p>Processed ${processedCount} classes for academic year ${academicYear}.</p>
+                `;
+            }
+            const uploadStatus = document.getElementById('uploadStatus');
+            if (uploadStatus) uploadStatus.style.display = 'block';
             
-            document.getElementById('timetableDataInfo').style.display = 'block';
+            const timetableDataInfo = document.getElementById('timetableDataInfo');
+            if (timetableDataInfo) timetableDataInfo.style.display = 'block';
+            
+            showPushButton();
         }
         
         function toCleanString(value) {
@@ -1375,21 +1452,40 @@
                 assignTeacherIdsInTimetableData();
                 autoFillMissingSubjectsFromTeacherMap();
                 
-                // Save to localStorage
-                saveTimetableToStorage();
+                // Prompt for academic year before saving
+                const academicYear = promptForAcademicYear();
+                if (!academicYear) {
+                    alert('Academic year is required. Please select a year to save the timetable.');
+                    return;
+                }
+                
+                // Update navbar selection if different
+                const navYearSelect = document.getElementById('nav-year-select');
+                if (navYearSelect) navYearSelect.value = academicYear;
+                localStorage.setItem('selectedAcademicYear', academicYear);
+                
+                // Save to localStorage with academic year
+                saveTimetableToStorage(academicYear);
                 
                 // Update UI
                 updateTimetableSummary();
                 renderTimetable();
                 
                 // Show upload status
-                document.getElementById('uploadStatus').style.display = 'block';
-                document.getElementById('uploadDetails').innerHTML = `
-                    <p><i class="fas fa-check-circle" style="color: var(--success-color);"></i> CSV Timetable uploaded successfully!</p>
-                    <p>Processed ${state.tempCSVData.length} classes.</p>
-                `;
+                const uploadDetails = document.getElementById('uploadDetails');
+                if (uploadDetails) {
+                    uploadDetails.innerHTML = `
+                        <p><i class="fas fa-check-circle" style="color: var(--success-color);"></i> CSV Timetable uploaded successfully!</p>
+                        <p>Processed ${state.tempCSVData.length} classes for academic year ${academicYear}.</p>
+                    `;
+                }
+                const uploadStatus = document.getElementById('uploadStatus');
+                if (uploadStatus) uploadStatus.style.display = 'block';
                 
-                document.getElementById('timetableDataInfo').style.display = 'block';
+                const timetableDataInfo = document.getElementById('timetableDataInfo');
+                if (timetableDataInfo) timetableDataInfo.style.display = 'block';
+                
+                showPushButton();
             }
             
             // Update class filters
