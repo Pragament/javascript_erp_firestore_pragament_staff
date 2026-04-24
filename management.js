@@ -684,10 +684,29 @@ function renderMappings() {
     container.innerHTML = filtered.map(m => {
         const teacher = allTeachers.find(t => t.email === m.teacherEmail);
         const subject = allSubjects.find(s => s.code === m.subjectCode);
-        const classNames = m.classSections?.map(cs => {
-            const csData = allClassSections.find(c => c.id === cs);
-            return csData ? `${csData.grade}-${csData.section}` : cs;
-        }).join(', ') || '-';
+        
+        // Handle class sections - could be IDs, names, or the class name from timetable
+        let classDisplay = '-';
+        if (m.classSections && m.classSections.length > 0) {
+            const classNames = m.classSections.map(cs => {
+                if (!cs) return 'Unknown';
+                // Try to find by ID first
+                let csData = allClassSections.find(c => c.id === cs);
+                // If not found by ID, try matching by fullName or grade-section combo
+                if (!csData) {
+                    csData = allClassSections.find(c => 
+                        c.fullName === cs || 
+                        `${c.grade}-${c.section}` === cs ||
+                        `${c.grade}-${c.section}` === cs.replace('Grade-', '').replace(/(I{1,3}|IV|V|VI{0,3}|IX|X)-/, (match) => {
+                            const roman = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10' };
+                            return roman[match.replace('-', '')] + '-';
+                        })
+                    );
+                }
+                return csData ? `${csData.grade}-${csData.section}` : (cs.substring(0, 15) + (cs.length > 15 ? '...' : ''));
+            });
+            classDisplay = classNames.join(', ');
+        }
         
         return `
         <div class="col-md-6 col-lg-4 mb-3">
@@ -699,14 +718,14 @@ function renderMappings() {
                     </div>
                     <p class="card-text">
                         <i class="bi bi-person me-2 text-primary"></i>${teacher ? teacher.name : m.teacherEmail}<br>
-                        <i class="bi bi-grid-3x3 me-2 text-secondary"></i>${classNames}<br>
+                        <i class="bi bi-grid-3x3 me-2 text-secondary"></i>${classDisplay}<br>
                         <small class="text-muted">${m.academicYear}</small>
                     </p>
-                    <div class="d-flex justify-content-end">
-                        <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editMapping('${m.id}')">
+                    <div class="d-flex justify-content-end mt-3">
+                        <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editMapping('${m.id}')" title="Edit Mapping">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteMapping('${m.id}')">
+                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteMapping('${m.id}')" title="Delete Mapping">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
@@ -871,33 +890,56 @@ async function importMappingsFromTimetable() {
     }
     
     try {
-        // Check if timetable exists in Firestore
-        const timetableDoc = await firestore.collection('timetables')
-            .doc(selectedSchool)
-            .collection('years')
-            .doc(selectedYear)
-            .get();
+        // First ensure class sections are imported (needed for proper ID matching)
+        const timetableData = await loadTimetableDataForImport();
+        if (!timetableData) return;
         
-        let timetableData = null;
+        // Auto-import class sections if missing
+        const classNames = Object.keys(timetableData);
+        let importedClasses = 0;
         
-        if (timetableDoc.exists) {
-            timetableData = timetableDoc.data().timetableData;
-        } else {
-            // Try to load from localStorage
-            const localTimetable = localStorage.getItem('schoolTimetable');
-            const localYear = localStorage.getItem('timetableAcademicYear');
+        for (const className of classNames) {
+            const parsed = parseClassName(className);
+            if (!parsed.grade || !parsed.section) continue;
             
-            if (localTimetable && localYear === selectedYear) {
-                timetableData = JSON.parse(localTimetable);
+            // Check if exists
+            const exists = allClassSections.some(cs => 
+                cs.grade === parsed.grade && 
+                cs.section?.toUpperCase() === parsed.section.toUpperCase()
+            );
+            
+            if (!exists) {
+                // Auto-create class section
+                const classData = {
+                    grade: parsed.grade,
+                    section: parsed.section.toUpperCase(),
+                    fullName: `${parsed.grade}-${parsed.section.toUpperCase()}`,
+                    academicYear: selectedYear,
+                    roomNumber: '',
+                    studentCount: 0,
+                    importedFromTimetable: true,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: currentUser.email
+                };
+                
+                try {
+                    await firestore.collection('schools').doc(selectedSchool)
+                        .collection('classSections').add(classData);
+                    importedClasses++;
+                } catch (err) {
+                    console.error('Error auto-importing class section:', err);
+                }
             }
         }
         
-        if (!timetableData) {
-            alert('No timetable data found for this academic year. Please upload a timetable first or wait for Firestore data to load.');
-            return;
+        // Reload class sections if we imported any
+        if (importedClasses > 0) {
+            await loadClassSections();
+            console.log(`Auto-imported ${importedClasses} class sections`);
         }
         
-        // Extract mappings from timetable
+        // Now extract mappings with proper class section IDs
         const extractedMappings = extractMappingsFromTimetable(timetableData);
         
         if (extractedMappings.length === 0) {
@@ -906,11 +948,13 @@ async function importMappingsFromTimetable() {
         }
         
         // Confirm import
-        const confirmed = confirm(
-            `Found ${extractedMappings.length} teacher-subject-class combinations in the timetable.\n\n` +
-            `Do you want to import these as formal mappings?\n\n` +
-            `Note: This will not overwrite existing mappings.`
-        );
+        let confirmMsg = `Found ${extractedMappings.length} teacher-subject-class combinations in the timetable.`;
+        if (importedClasses > 0) {
+            confirmMsg += `\nAlso auto-imported ${importedClasses} class sections.`;
+        }
+        confirmMsg += `\n\nDo you want to import these as formal mappings?\n\nNote: This will not overwrite existing mappings.`;
+        
+        const confirmed = confirm(confirmMsg);
         
         if (!confirmed) return;
         
@@ -957,10 +1001,17 @@ async function importMappingsFromTimetable() {
             }
         }
         
-        alert(`Import complete!\n\nImported: ${imported}\nSkipped (already exist): ${skipped}`);
+        let alertMsg = `Import complete!\n\nMappings imported: ${imported}\nMappings skipped: ${skipped}`;
+        if (importedClasses > 0) {
+            alertMsg += `\nClass sections auto-imported: ${importedClasses}`;
+        }
+        alert(alertMsg);
         
-        // Reload mappings
+        // Reload mappings and class sections
         await loadMappings();
+        if (importedClasses > 0) {
+            await loadClassSections();
+        }
         
     } catch (error) {
         console.error('Error importing from timetable:', error);
@@ -973,14 +1024,32 @@ function extractMappingsFromTimetable(timetableData) {
     const mappings = [];
     const mappingSet = new Set(); // To avoid duplicates
     
+    // Roman numeral mapping
+    const romanToArabic = {
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
+        'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'
+    };
+    
     // timetableData structure: { "1-A": { className: "1-A", days: [...] } }
     for (const [className, classData] of Object.entries(timetableData)) {
         if (!classData || !classData.days) continue;
         
-        // Find class section ID
-        const classSection = allClassSections.find(cs => 
+        // Find class section ID - try multiple matching strategies
+        let classSection = allClassSections.find(cs => 
             `${cs.grade}-${cs.section}` === className || cs.fullName === className
         );
+        
+        // Try matching by parsing the class name (handles "Grade-II-A" -> "2-A")
+        if (!classSection) {
+            const parsed = parseClassName(className);
+            if (parsed.grade && parsed.section) {
+                classSection = allClassSections.find(cs => 
+                    cs.grade === parsed.grade && 
+                    cs.section?.toUpperCase() === parsed.section.toUpperCase()
+                );
+            }
+        }
+        
         const classSectionId = classSection ? classSection.id : null;
         
         // Process each day
