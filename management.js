@@ -1037,6 +1037,349 @@ function extractMappingsFromTimetable(timetableData) {
     return mappings;
 }
 
+// Import Teachers from timetable
+async function importTeachersFromTimetable() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    try {
+        const timetableData = await loadTimetableDataForImport();
+        if (!timetableData) return;
+        
+        // Extract unique teachers
+        const teachers = extractTeachersFromTimetable(timetableData);
+        
+        if (teachers.length === 0) {
+            alert('No teachers found in timetable data.');
+            return;
+        }
+        
+        const confirmed = confirm(
+            `Found ${teachers.length} unique teachers in the timetable.\n\n` +
+            `Do you want to add them to the database?\n\n` +
+            `Note: Teachers with matching emails will be skipped.`
+        );
+        
+        if (!confirmed) return;
+        
+        let imported = 0;
+        let skipped = 0;
+        
+        for (const teacher of teachers) {
+            // Check if teacher with this email already exists
+            const exists = allTeachers.some(t => 
+                t.email?.toLowerCase() === teacher.email?.toLowerCase()
+            );
+            
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            
+            const teacherData = {
+                name: teacher.name,
+                email: teacher.email,
+                status: 'active',
+                joinDate: new Date().toISOString().split('T')[0],
+                notes: `Imported from ${selectedYear} timetable`,
+                importedFromTimetable: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            };
+            
+            try {
+                await firestore.collection('schools').doc(selectedSchool)
+                    .collection('teachers').add(teacherData);
+                imported++;
+            } catch (err) {
+                console.error('Error importing teacher:', err);
+            }
+        }
+        
+        alert(`Import complete!\n\nImported: ${imported}\nSkipped (already exist): ${skipped}`);
+        await loadTeachers();
+        
+    } catch (error) {
+        console.error('Error importing teachers:', error);
+        alert('Error importing teachers: ' + error.message);
+    }
+}
+
+// Extract teachers from timetable
+function extractTeachersFromTimetable(timetableData) {
+    const teacherSet = new Map(); // Use Map to store name->email pairs
+    
+    for (const classData of Object.values(timetableData)) {
+        if (!classData || !classData.days) continue;
+        
+        classData.days.forEach(day => {
+            if (!day.periods) return;
+            
+            day.periods.forEach(period => {
+                if (!period.teacherId && !period.teacherName) return;
+                
+                const name = period.teacherName || period.teacherId;
+                const email = period.teacherEmail || period.teacherId;
+                
+                if (name && !teacherSet.has(email)) {
+                    teacherSet.set(email, { name, email });
+                }
+            });
+        });
+    }
+    
+    return Array.from(teacherSet.values());
+}
+
+// Import Subjects from timetable
+async function importSubjectsFromTimetable() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    try {
+        const timetableData = await loadTimetableDataForImport();
+        if (!timetableData) return;
+        
+        // Extract unique subjects
+        const subjects = extractSubjectsFromTimetable(timetableData);
+        
+        if (subjects.length === 0) {
+            alert('No subjects found in timetable data.');
+            return;
+        }
+        
+        const confirmed = confirm(
+            `Found ${subjects.length} unique subjects in the timetable.\n\n` +
+            `Do you want to add them to the database?\n\n` +
+            `Note: Subjects with matching codes will be skipped.`
+        );
+        
+        if (!confirmed) return;
+        
+        let imported = 0;
+        let skipped = 0;
+        
+        for (const subject of subjects) {
+            // Check if subject with this code already exists
+            const exists = allSubjects.some(s => 
+                s.code?.toLowerCase() === subject.code?.toLowerCase()
+            );
+            
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            
+            const subjectData = {
+                code: subject.code,
+                name: subject.name,
+                status: 'active',
+                periodsPerWeek: 5,
+                description: `Imported from ${selectedYear} timetable`,
+                importedFromTimetable: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            };
+            
+            try {
+                await firestore.collection('schools').doc(selectedSchool)
+                    .collection('subjects').add(subjectData);
+                imported++;
+            } catch (err) {
+                console.error('Error importing subject:', err);
+            }
+        }
+        
+        alert(`Import complete!\n\nImported: ${imported}\nSkipped (already exist): ${skipped}`);
+        await loadSubjects();
+        
+    } catch (error) {
+        console.error('Error importing subjects:', error);
+        alert('Error importing subjects: ' + error.message);
+    }
+}
+
+// Extract subjects from timetable
+function extractSubjectsFromTimetable(timetableData) {
+    const subjectSet = new Map();
+    
+    for (const classData of Object.values(timetableData)) {
+        if (!classData || !classData.days) continue;
+        
+        classData.days.forEach(day => {
+            if (!day.periods) return;
+            
+            day.periods.forEach(period => {
+                if (!period.subject) return;
+                
+                // Generate code from subject name (uppercase, first 5 chars + numbers if duplicate)
+                let code = period.subject.toUpperCase().replace(/\s+/g, '').substring(0, 6);
+                
+                // Make unique if needed
+                let uniqueCode = code;
+                let counter = 1;
+                while (subjectSet.has(uniqueCode) && subjectSet.get(uniqueCode).name !== period.subject) {
+                    uniqueCode = `${code}${counter}`;
+                    counter++;
+                }
+                
+                if (!subjectSet.has(uniqueCode)) {
+                    subjectSet.set(uniqueCode, { code: uniqueCode, name: period.subject });
+                }
+            });
+        });
+    }
+    
+    return Array.from(subjectSet.values());
+}
+
+// Import Class Sections from timetable
+async function importClassSectionsFromTimetable() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    try {
+        const timetableData = await loadTimetableDataForImport();
+        if (!timetableData) return;
+        
+        // Extract unique class sections
+        const classNames = Object.keys(timetableData);
+        
+        if (classNames.length === 0) {
+            alert('No class sections found in timetable data.');
+            return;
+        }
+        
+        const confirmed = confirm(
+            `Found ${classNames.length} class sections in the timetable.\n\n` +
+            `Do you want to add them to the database?\n\n` +
+            `Note: Class sections that already exist for this year will be skipped.`
+        );
+        
+        if (!confirmed) return;
+        
+        let imported = 0;
+        let skipped = 0;
+        
+        for (const className of classNames) {
+            // Parse class name (e.g., "1-A", "2B", "Grade 3-C")
+            const parsed = parseClassName(className);
+            if (!parsed.grade || !parsed.section) {
+                console.warn(`Could not parse class name: ${className}`);
+                continue;
+            }
+            
+            // Check if class section already exists for this year
+            const exists = allClassSections.some(cs => 
+                cs.grade === parsed.grade && 
+                cs.section?.toUpperCase() === parsed.section?.toUpperCase() &&
+                cs.academicYear === selectedYear
+            );
+            
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            
+            const classData = {
+                grade: parsed.grade,
+                section: parsed.section.toUpperCase(),
+                fullName: `${parsed.grade}-${parsed.section.toUpperCase()}`,
+                academicYear: selectedYear,
+                roomNumber: '',
+                studentCount: 0,
+                importedFromTimetable: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            };
+            
+            try {
+                await firestore.collection('schools').doc(selectedSchool)
+                    .collection('classSections').add(classData);
+                imported++;
+            } catch (err) {
+                console.error('Error importing class section:', err);
+            }
+        }
+        
+        alert(`Import complete!\n\nImported: ${imported}\nSkipped (already exist): ${skipped}`);
+        await loadClassSections();
+        
+    } catch (error) {
+        console.error('Error importing class sections:', error);
+        alert('Error importing class sections: ' + error.message);
+    }
+}
+
+// Parse class name to extract grade and section
+function parseClassName(className) {
+    // Try different patterns: "1-A", "2B", "Grade 3-C", "Class 4A"
+    const patterns = [
+        /^(\d+)[-\s]?(\w)$/i,           // "1-A", "2B", "3-C"
+        /^Grade\s*(\d+)[-\s]?(\w)$/i,   // "Grade 1-A", "Grade 2B"
+        /^Class\s*(\d+)[-\s]?(\w)$/i,   // "Class 1-A", "Class 2B"
+    ];
+    
+    for (const pattern of patterns) {
+        const match = className.match(pattern);
+        if (match) {
+            return { grade: match[1], section: match[2] };
+        }
+    }
+    
+    // Fallback: split by hyphen or space
+    const parts = className.split(/[-\s]/);
+    if (parts.length >= 2) {
+        const grade = parts[0].replace(/\D/g, '');
+        const section = parts[1];
+        if (grade && section) {
+            return { grade, section };
+        }
+    }
+    
+    return { grade: null, section: null };
+}
+
+// Helper: Load timetable data for import
+async function loadTimetableDataForImport() {
+    // Check Firestore first
+    const timetableDoc = await firestore.collection('timetables')
+        .doc(selectedSchool)
+        .collection('years')
+        .doc(selectedYear)
+        .get();
+    
+    let timetableData = null;
+    
+    if (timetableDoc.exists) {
+        timetableData = timetableDoc.data().timetableData;
+    } else {
+        // Try localStorage
+        const localTimetable = localStorage.getItem('schoolTimetable');
+        const localYear = localStorage.getItem('timetableAcademicYear');
+        
+        if (localTimetable && localYear === selectedYear) {
+            timetableData = JSON.parse(localTimetable);
+        }
+    }
+    
+    if (!timetableData) {
+        alert('No timetable data found for this academic year. Please upload a timetable first.');
+        return null;
+    }
+    
+    return timetableData;
+}
+
 // ============== HISTORY ==============
 
 async function loadHistory() {
