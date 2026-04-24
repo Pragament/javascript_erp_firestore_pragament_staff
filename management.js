@@ -1322,27 +1322,56 @@ async function importClassSectionsFromTimetable() {
 
 // Parse class name to extract grade and section
 function parseClassName(className) {
-    // Try different patterns: "1-A", "2B", "Grade 3-C", "Class 4A"
+    // Roman numeral mapping
+    const romanToArabic = {
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
+        'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'
+    };
+    
+    // Try different patterns
     const patterns = [
-        /^(\d+)[-\s]?(\w)$/i,           // "1-A", "2B", "3-C"
-        /^Grade\s*(\d+)[-\s]?(\w)$/i,   // "Grade 1-A", "Grade 2B"
-        /^Class\s*(\d+)[-\s]?(\w)$/i,   // "Class 1-A", "Class 2B"
+        // Arabic numerals: "1-A", "2B", "3-C"
+        { pattern: /^(\d+)[-\s]?(\w)$/i, isRoman: false },
+        // "Grade 1-A", "Grade 2B" (with Arabic)
+        { pattern: /^Grade\s*(\d+)[-\s]?(\w)$/i, isRoman: false },
+        // "Class 1-A", "Class 2B" (with Arabic)
+        { pattern: /^Class\s*(\d+)[-\s]?(\w)$/i, isRoman: false },
+        // "Grade-I-A", "Grade-II-B" (with Roman numerals)
+        { pattern: /^Grade[-\s]*(I{1,3}|IV|V|VI{0,3}|IX|X)[-\s]?(\w)$/i, isRoman: true },
+        // "Class-I-A", "Class-II-B" (with Roman numerals)
+        { pattern: /^Class[-\s]*(I{1,3}|IV|V|VI{0,3}|IX|X)[-\s]?(\w)$/i, isRoman: true },
+        // Just Roman numerals with section: "II-A", "IV-B"
+        { pattern: /^(I{1,3}|IV|V|VI{0,3}|IX|X)[-\s]?(\w)$/i, isRoman: true },
     ];
     
-    for (const pattern of patterns) {
+    for (const { pattern, isRoman } of patterns) {
         const match = className.match(pattern);
         if (match) {
-            return { grade: match[1], section: match[2] };
+            const grade = isRoman ? romanToArabic[match[1].toUpperCase()] : match[1];
+            const section = match[2].toUpperCase();
+            return { grade, section };
         }
     }
     
-    // Fallback: split by hyphen or space
-    const parts = className.split(/[-\s]/);
+    // Fallback: split by hyphen and try to identify parts
+    const parts = className.split(/[-\s]/).filter(p => p);
     if (parts.length >= 2) {
-        const grade = parts[0].replace(/\D/g, '');
-        const section = parts[1];
-        if (grade && section) {
-            return { grade, section };
+        // Try to find which part is the grade (number or Roman numeral)
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i].toUpperCase();
+            
+            // Check if it's a Roman numeral
+            if (romanToArabic[part]) {
+                const section = parts[i + 1] || parts[parts.length - 1];
+                return { grade: romanToArabic[part], section: section.replace(/\d/g, '').toUpperCase() || 'A' };
+            }
+            
+            // Check if it's a number
+            const numMatch = part.match(/^(\d+)$/);
+            if (numMatch) {
+                const section = parts[i + 1] || parts[parts.length - 1];
+                return { grade: numMatch[1], section: section.replace(/\d/g, '').toUpperCase() || 'A' };
+            }
         }
     }
     
@@ -1378,6 +1407,107 @@ async function loadTimetableDataForImport() {
     }
     
     return timetableData;
+}
+
+// ============== CSV DOWNLOADS ==============
+
+function downloadTeachersCSV() {
+    if (allTeachers.length === 0) {
+        alert('No teachers to download');
+        return;
+    }
+    
+    const headers = ['Name', 'Email', 'Phone', 'Status', 'Join Date', 'Notes'];
+    const rows = allTeachers.map(t => [
+        t.name || '',
+        t.email || '',
+        t.phone || '',
+        t.status || '',
+        t.joinDate || '',
+        (t.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
+    ]);
+    
+    downloadCSV('teachers', headers, rows);
+}
+
+function downloadSubjectsCSV() {
+    if (allSubjects.length === 0) {
+        alert('No subjects to download');
+        return;
+    }
+    
+    const headers = ['Code', 'Name', 'Periods/Week', 'Status', 'Description'];
+    const rows = allSubjects.map(s => [
+        s.code || '',
+        s.name || '',
+        s.periodsPerWeek || '',
+        s.status || '',
+        (s.description || '').replace(/,/g, ';').replace(/\n/g, ' ')
+    ]);
+    
+    downloadCSV('subjects', headers, rows);
+}
+
+function downloadClassSectionsCSV() {
+    if (allClassSections.length === 0) {
+        alert('No class sections to download');
+        return;
+    }
+    
+    const headers = ['Grade', 'Section', 'Class Teacher Email', 'Room Number', 'Student Count', 'Academic Year'];
+    const rows = allClassSections.map(cs => [
+        cs.grade || '',
+        cs.section || '',
+        cs.classTeacherEmail || '',
+        cs.roomNumber || '',
+        cs.studentCount || '',
+        cs.academicYear || ''
+    ]);
+    
+    downloadCSV('class_sections', headers, rows);
+}
+
+function downloadMappingsCSV() {
+    if (allMappings.length === 0) {
+        alert('No mappings to download');
+        return;
+    }
+    
+    const headers = ['Teacher Name', 'Teacher Email', 'Subject Code', 'Subject Name', 'Class Sections', 'Effective From', 'Effective To', 'Status', 'Notes'];
+    const rows = allMappings.map(m => [
+        m.teacherName || '',
+        m.teacherEmail || '',
+        m.subjectCode || '',
+        m.subjectName || '',
+        (m.classSections || []).join('; '),
+        m.effectiveFrom || '',
+        m.effectiveTo || '',
+        m.status || '',
+        (m.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
+    ]);
+    
+    downloadCSV('teacher_mappings', headers, rows);
+}
+
+function downloadCSV(filename, headers, rows) {
+    // Create CSV content
+    const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}_${selectedYear || 'all'}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // ============== HISTORY ==============

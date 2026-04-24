@@ -128,7 +128,21 @@ If you already have a timetable uploaded, you can extract mappings automatically
 
 **Note**: Mappings are specific to the selected academic year. Previous year mappings remain accessible for reference.
 
-### 3.6 Viewing Change History
+### 3.6 Downloading Data as CSV
+You can download data from any management tab as a CSV file for external use:
+
+1. Navigate to any tab (Teachers, Subjects, Class Sections, or Mappings)
+2. Click the **"Download CSV"** button (next to Import button)
+3. The CSV file will be downloaded with current data
+4. Filename includes the academic year (e.g., `teachers_2024-2025.csv`)
+
+**Available Downloads:**
+- **Teachers CSV**: Name, Email, Phone, Status, Join Date, Notes
+- **Subjects CSV**: Code, Name, Periods/Week, Status, Description
+- **Class Sections CSV**: Grade, Section, Class Teacher Email, Room Number, Student Count, Academic Year
+- **Mappings CSV**: Teacher Name/Email, Subject Code/Name, Class Sections, Effective Dates, Status, Notes
+
+### 3.7 Viewing Change History
 1. Click on the **"Change History"** tab
 2. View all teacher changes (joins, transfers, exits)
 3. Filter by type: All, Joined, Left, Transferred
