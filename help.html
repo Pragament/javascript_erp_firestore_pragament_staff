@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Principal's Guide - School Admin System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --info-color: #17a2b8;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        .navbar {
+            background-color: var(--primary-color);
+            padding: 0.75rem 1rem;
+        }
+        
+        .help-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 2.5rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 2px solid #f0f0f0;
+            font-weight: 600;
+            padding: 1rem 1.25rem;
+        }
+        
+        .step-number {
+            width: 32px;
+            height: 32px;
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 0.75rem;
+        }
+        
+        .tip-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        
+        .warning-box {
+            background-color: #fff3e0;
+            border-left: 4px solid var(--warning-color);
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        
+        .role-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .role-admin {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .role-editor {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .role-viewer {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .nav-pills .nav-link {
+            color: var(--secondary-color);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            padding: 0.75rem 1rem;
+        }
+        
+        .nav-pills .nav-link.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        
+        .nav-pills .nav-link:hover:not(.active) {
+            background-color: #e9ecef;
+        }
+        
+        .screenshot-placeholder {
+            background-color: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            color: #6c757d;
+            margin: 1rem 0;
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--secondary-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .toc-list a:hover {
+            color: var(--accent-color);
+        }
+        
+        .quick-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            background-color: var(--accent-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .quick-link:hover {
+            background-color: #2980b9;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand fw-bold">
+                <i class="bi bi-building me-2"></i>School Admin
+            </span>
+            <div class="d-flex align-items-center gap-2">
+                <a href="index.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="help-header">
+        <div class="container">
+            <h1><i class="bi bi-book me-3"></i>Principal's Guide</h1>
+            <p class="lead mb-0">Complete guide to managing your school administration system</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <div class="col-lg-3">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-list-ul me-2"></i>Contents
+                    </div>
+                    <div class="card-body">
+                        <ul class="toc-list">
+                            <li><a href="#overview"><i class="bi bi-house-door"></i> Overview</a></li>
+                            <li><a href="#getting-started"><i class="bi bi-power"></i> Getting Started</a></li>
+                            <li><a href="#teacher-assignments"><i class="bi bi-people"></i> Managing Teachers</a></li>
+                            <li><a href="#timetables"><i class="bi bi-calendar-week"></i> Timetables</a></li>
+                            <li><a href="#roles"><i class="bi bi-shield-check"></i> Understanding Roles</a></li>
+                            <li><a href="#best-practices"><i class="bi bi-star"></i> Best Practices</a></li>
+                            <li><a href="#troubleshooting"><i class="bi bi-tools"></i> Troubleshooting</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-lightning-charge me-2"></i>Quick Actions
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="index.html" class="quick-link">
+                                <i class="bi bi-people"></i> Manage Teachers
+                            </a>
+                            <a href="timetable/index.html" class="quick-link">
+                                <i class="bi bi-calendar-week"></i> View Timetable
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-lg-9">
+                
+                <!-- Overview Section -->
+                <section id="overview" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-house-door me-2"></i>System Overview</h4>
+                        </div>
+                        <div class="card-body">
+                            <p>Welcome to the School Admin System! As a Principal, you have complete control over:</p>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i><strong>Teacher Assignments:</strong> Assign teachers to sections with specific roles</li>
+                                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i><strong>Section Management:</strong> Control who can view or edit each class section</li>
+                                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i><strong>Timetable Management:</strong> Upload, view, and manage school timetables</li>
+                                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i><strong>Academic Year Planning:</strong> Copy timetables between years for easy planning</li>
+                            </ul>
+                            
+                            <div class="tip-box">
+                                <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                                <strong>Pro Tip:</strong> Always select a School and Academic Year from the dropdowns in the top navigation bar before performing any operations.
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Getting Started -->
+                <section id="getting-started" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-power me-2"></i>Getting Started</h4>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="mb-3">Step-by-Step Login Process</h5>
+                            
+                            <div class="d-flex align-items-start mb-3">
+                                <span class="step-number">1</span>
+                                <div>
+                                    <strong>Open the Application</strong>
+                                    <p class="text-muted mb-0">Navigate to the application URL in your browser.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex align-items-start mb-3">
+                                <span class="step-number">2</span>
+                                <div>
+                                    <strong>Sign In with Google</strong>
+                                    <p class="text-muted mb-0">Click the "Sign in with Google" button and select your school email account.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex align-items-start mb-3">
+                                <span class="step-number">3</span>
+                                <div>
+                                    <strong>Select Your School</strong>
+                                    <p class="text-muted mb-0">Use the "Select School" dropdown in the top navigation bar.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex align-items-start mb-3">
+                                <span class="step-number">4</span>
+                                <div>
+                                    <strong>Select Academic Year</strong>
+                                    <p class="text-muted mb-0">Choose the current academic year from the "Select Year" dropdown.</p>
+                                </div>
+                            </div>
+
+                            <div class="warning-box">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                                <strong>Important:</strong> If you don't see your school in the dropdown, contact the system administrator to add your school to the database.
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Teacher Assignments -->
+                <section id="teacher-assignments" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-people me-2"></i>Managing Teacher Assignments</h4>
+                        </div>
+                        <div class="card-body">
+                            <p>As Principal, you can assign teachers to sections and control their permissions. Here's how:</p>
+
+                            <h5 class="mt-4">Assigning a Teacher</h5>
+                            <ol>
+                                <li>Go to the main dashboard (index page)</li>
+                                <li>Ensure your school is selected in the navbar</li>
+                                <li>In the "Assign Teacher to Section" panel:
+                                    <ul>
+                                        <li>Select a <strong>Section</strong> (e.g., "1-A", "2-B")</li>
+                                        <li>Enter the teacher's <strong>email address</strong></li>
+                                        <li>Select the appropriate <strong>Role</strong> (see Roles section below)</li>
+                                    </ul>
+                                </li>
+                                <li>Click <strong>"Assign Teacher"</strong></li>
+                            </ol>
+
+                            <h5 class="mt-4">Editing Assignments</h5>
+                            <ol>
+                                <li>Find the assignment in the assignments table</li>
+                                <li>Click the <strong>pencil icon</strong> (edit button)</li>
+                                <li>Modify the email or role in the popup</li>
+                                <li>Click <strong>"Save Changes"</strong></li>
+                            </ol>
+
+                            <div class="tip-box">
+                                <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                                <strong>Tip:</strong> The assignments table shows only sections where you have Admin role. Use the filter dropdowns above the table to find specific assignments quickly.
+                            </div>
+
+                            <h5 class="mt-4">Filtering and Sorting</h5>
+                            <ul>
+                                <li><strong>Sort:</strong> Click on column headers (Teacher, Section, Role, etc.) to sort</li>
+                                <li><strong>Filter:</strong> Use the dropdown filters to filter by Section, Teacher, Role, or Assigned By</li>
+                                <li><strong>Clear Filters:</strong> Click "Clear Filters" to reset all filters</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Timetables -->
+                <section id="timetables" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-calendar-week me-2"></i>Managing Timetables</h4>
+                        </div>
+                        <div class="card-body">
+                            <h5>Uploading a New Timetable</h5>
+                            <ol>
+                                <li>Click the <strong>"Timetable"</strong> button in the navbar</li>
+                                <li>Select your <strong>School</strong> and <strong>Academic Year</strong></li>
+                                <li>Go to the <strong>"Upload Timetable"</strong> tab</li>
+                                <li>Choose upload method:
+                                    <ul>
+                                        <li><strong>Excel:</strong> Drag and drop or click to select Excel file</li>
+                                        <li><strong>CSV:</strong> Select CSV option and upload your file</li>
+                                    </ul>
+                                </li>
+                                <li>If CSV, set period times in the modal that appears</li>
+                                <li>When prompted, confirm the <strong>Academic Year</strong></li>
+                                <li>Click <strong>"Push"</strong> to save to Firestore (cloud)</li>
+                            </ol>
+
+                            <div class="warning-box">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                                <strong>File Format:</strong> Excel files should have sheets named as class-sections (e.g., "1-A", "2-B"). CSV files should have headers: Class-Section, Day, P1, P2, P3, etc.
+                            </div>
+
+                            <h5 class="mt-4">Copying Timetable to Next Year</h5>
+                            <p>This feature saves time by copying an existing timetable as a template:</p>
+                            <ol>
+                                <li>Select your <strong>School</strong> in the navbar</li>
+                                <li>Click the <strong>"Copy Year"</strong> button</li>
+                                <li>In the modal:
+                                    <ul>
+                                        <li><strong>Source Year:</strong> The year to copy from (e.g., 2024-25)</li>
+                                        <li><strong>Target Year:</strong> The year to copy to (e.g., 2025-26)</li>
+                                    </ul>
+                                </li>
+                                <li>Click <strong>"Copy Timetable"</strong></li>
+                                <li>The system automatically switches to the new year</li>
+                            </ol>
+
+                            <div class="tip-box">
+                                <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                                <strong>Best Practice:</strong> Use Copy Year at the end of each academic year to create the next year's timetable template. Then make minor adjustments rather than starting from scratch.
+                            </div>
+
+                            <h5 class="mt-4">Viewing and Checking Timetables</h5>
+                            <ul>
+                                <li><strong>Class View:</strong> See all periods for a specific class</li>
+                                <li><strong>Teacher View:</strong> See a teacher's weekly schedule</li>
+                                <li><strong>Subject View:</strong> See when a subject is taught across classes</li>
+                                <li><strong>Overlap Check:</strong> Detect scheduling conflicts (same teacher assigned to two classes at once)</li>
+                            </ul>
+
+                            <h5 class="mt-4">Managing Holidays</h5>
+                            <ol>
+                                <li>Go to the <strong>"Holidays"</strong> tab in Timetable</li>
+                                <li>Click <strong>"Add Holiday"</strong></li>
+                                <li>Fill in holiday name, date, type, and description</li>
+                                <li>Click <strong>"Save Holiday"</strong></li>
+                                <li>Use <strong>"Export Holidays"</strong> to download as CSV for records</li>
+                            </ol>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Roles -->
+                <section id="roles" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-shield-check me-2"></i>Understanding User Roles</h4>
+                        </div>
+                        <div class="card-body">
+                            <p>When assigning teachers to sections, you can assign three different roles:</p>
+
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Role</th>
+                                        <th>Badge</th>
+                                        <th>Permissions</th>
+                                        <th>Best For</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Admin</strong></td>
+                                        <td><span class="role-badge role-admin">Admin</span></td>
+                                        <td>
+                                            <ul class="mb-0">
+                                                <li>Full control over the section</li>
+                                                <li>Assign other teachers to this section</li>
+                                                <li>Edit timetables</li>
+                                                <li>View all data</li>
+                                            </ul>
+                                        </td>
+                                        <td>Class Teachers, Subject Coordinators</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Editor</strong></td>
+                                        <td><span class="role-badge role-editor">Editor</span></td>
+                                        <td>
+                                            <ul class="mb-0">
+                                                <li>Modify timetables</li>
+                                                <li>View all section data</li>
+                                                <li>Cannot assign other teachers</li>
+                                            </ul>
+                                        </td>
+                                        <td>Subject Teachers who need to update schedules</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Viewer</strong></td>
+                                        <td><span class="role-badge role-viewer">Viewer</span></td>
+                                        <td>
+                                            <ul class="mb-0">
+                                                <li>View timetables only</li>
+                                                <li>Cannot make changes</li>
+                                            </ul>
+                                        </td>
+                                        <td>Substitute teachers, Support staff</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="warning-box">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                                <strong>Security Note:</strong> Only assign Admin role to trusted staff. Admins can assign other users and have full control over their assigned sections.
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Best Practices -->
+                <section id="best-practices" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-star me-2"></i>Best Practices for Principals</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-1-circle text-primary me-2"></i>Regular Data Backup</h6>
+                                    <p class="small text-muted">Always click "Push" after making important changes to ensure data is saved to the cloud (Firestore).</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-2-circle text-primary me-2"></i>Use Copy Year Feature</h6>
+                                    <p class="small text-muted">At the end of each academic year, copy the current timetable to the next year as a starting template.</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-3-circle text-primary me-2"></i>Check Overlaps Regularly</h6>
+                                    <p class="small text-muted">After any timetable changes, run the "Check Overlaps" feature to ensure no teacher scheduling conflicts.</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-4-circle text-primary me-2"></i>Assign Roles Carefully</h6>
+                                    <p class="small text-muted">Limit Admin roles to class teachers and coordinators. Use Editor for regular teachers who need to update schedules.</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-5-circle text-primary me-2"></i>Keep Holidays Updated</h6>
+                                    <p class="small text-muted">Add holidays at the start of each academic year. Export the list for school records.</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-6-circle text-primary me-2"></i>Verify Before Push</h6>
+                                    <p class="small text-muted">Always verify the timetable looks correct (use View Timetable) before pushing to Firestore.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Troubleshooting -->
+                <section id="troubleshooting" class="mb-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0"><i class="bi bi-tools me-2"></i>Troubleshooting</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="accordion" id="troubleshootingAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                            Cannot see my school in dropdown
+                                        </button>
+                                    </h2>
+                                    <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                                        <div class="accordion-body">
+                                            Contact the system administrator to add your school to the Firestore database. You'll need to provide:
+                                            <ul>
+                                                <li>School Name</li>
+                                                <li>School ID</li>
+                                                <li>List of sections (classes)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                            Push to Firestore button is not working
+                                        </button>
+                                    </h2>
+                                    <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                                        <div class="accordion-body">
+                                            Check the following:
+                                            <ol>
+                                                <li>Ensure you are signed in</li>
+                                                <li>Verify School and Academic Year are selected</li>
+                                                <li>Check internet connection</li>
+                                                <li>Open browser console (F12) to check for error messages</li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
+                                            Timetable upload failed
+                                        </button>
+                                    </h2>
+                                    <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                                        <div class="accordion-body">
+                                            Common issues:
+                                            <ul>
+                                                <li>File format doesn't match expected structure</li>
+                                                <li>Excel sheets not named correctly (should be "1-A", "2-B" format)</li>
+                                                <li>CSV missing required columns (Class-Section, Day, P1, P2...)</li>
+                                                <li>File is corrupted or too large</li>
+                                            </ul>
+                                            Try downloading the template file from the Upload Timetable page.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour">
+                                            Cannot assign teacher to section
+                                        </button>
+                                    </h2>
+                                    <div id="collapseFour" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                                        <div class="accordion-body">
+                                            You can only assign teachers to sections where you have <strong>Admin</strong> role. If a section doesn't appear in your dropdown, it means:
+                                            <ul>
+                                                <li>You are not assigned as Admin to that section</li>
+                                                <li>The section hasn't been created in Firestore</li>
+                                            </ul>
+                                            Contact the system administrator if you need Admin access to additional sections.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center py-4 text-muted">
+        <div class="container">
+            <small>School Admin System &copy; 2024-2025 | Principal's Help Guide</small>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
