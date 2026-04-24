@@ -2616,6 +2616,138 @@
             alert("Periods swapped successfully!");
         }
         
+        // Open copy year modal
+        function openCopyYearModal() {
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            if (!selectedSchool) {
+                alert('Please select a school first');
+                return;
+            }
+            
+            // Pre-fill source year with current selection
+            const currentYear = localStorage.getItem('selectedAcademicYear');
+            const sourceSelect = document.getElementById('copySourceYear');
+            if (sourceSelect && currentYear) {
+                sourceSelect.value = currentYear;
+            }
+            
+            // Clear any previous errors
+            const errorDiv = document.getElementById('copyYearError');
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+                errorDiv.textContent = '';
+            }
+            
+            document.getElementById('copyYearModal').classList.add('active');
+        }
+        
+        // Close copy year modal
+        function closeCopyYearModal() {
+            document.getElementById('copyYearModal').classList.remove('active');
+        }
+        
+        // Confirm copy year
+        async function confirmCopyYear() {
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            const sourceYear = document.getElementById('copySourceYear').value;
+            const targetYear = document.getElementById('copyTargetYear').value;
+            const errorDiv = document.getElementById('copyYearError');
+            
+            // Validate
+            if (!sourceYear || !targetYear) {
+                errorDiv.textContent = 'Please select both source and target years';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            if (sourceYear === targetYear) {
+                errorDiv.textContent = 'Source and target years cannot be the same';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            errorDiv.style.display = 'none';
+            
+            try {
+                // Load source data from Firestore
+                const sourceDoc = await firestore.collection('timetables')
+                    .doc(selectedSchool)
+                    .collection('years')
+                    .doc(sourceYear)
+                    .get();
+                
+                if (!sourceDoc.exists) {
+                    // Try to load from localStorage if not in Firestore
+                    const localYear = localStorage.getItem('timetableAcademicYear');
+                    const hasLocalData = !!localStorage.getItem('schoolTimetable');
+                    
+                    if (hasLocalData && localYear === sourceYear) {
+                        // Use local data
+                        const dataToCopy = {
+                            timetableData: state.timetableData,
+                            holidays: state.holidays,
+                            periodTimes: state.periodTimes,
+                            teacherSubjectMap: state.teacherSubjectMap,
+                            currentYear: state.currentYear,
+                            schoolId: selectedSchool,
+                            academicYear: targetYear,
+                            copiedFrom: sourceYear,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: currentUser ? currentUser.email : 'unknown'
+                        };
+                        
+                        await firestore.collection('timetables')
+                            .doc(selectedSchool)
+                            .collection('years')
+                            .doc(targetYear)
+                            .set(dataToCopy);
+                        
+                        alert(`Timetable copied from ${sourceYear} to ${targetYear} successfully!`);
+                        closeCopyYearModal();
+                        
+                        // Switch to the new year
+                        localStorage.setItem('selectedAcademicYear', targetYear);
+                        const navYearSelect = document.getElementById('nav-year-select');
+                        if (navYearSelect) navYearSelect.value = targetYear;
+                        await reloadForSchoolAndYear();
+                    } else {
+                        errorDiv.textContent = `No timetable found for ${sourceYear}. Please upload or push data first.`;
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                } else {
+                    // Copy from Firestore source to target
+                    const sourceData = sourceDoc.data();
+                    const dataToCopy = {
+                        ...sourceData,
+                        academicYear: targetYear,
+                        copiedFrom: sourceYear,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: currentUser ? currentUser.email : 'unknown'
+                    };
+                    
+                    await firestore.collection('timetables')
+                        .doc(selectedSchool)
+                        .collection('years')
+                        .doc(targetYear)
+                        .set(dataToCopy);
+                    
+                    alert(`Timetable copied from ${sourceYear} to ${targetYear} successfully!`);
+                    closeCopyYearModal();
+                    
+                    // Switch to the new year
+                    localStorage.setItem('selectedAcademicYear', targetYear);
+                    const navYearSelect = document.getElementById('nav-year-select');
+                    if (navYearSelect) navYearSelect.value = targetYear;
+                    await reloadForSchoolAndYear();
+                }
+            } catch (error) {
+                console.error('Error copying timetable:', error);
+                errorDiv.textContent = 'Error copying timetable: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+        
         // Get period details
         function getPeriodDetails(periodInfo) {
             const classData = state.timetableData[periodInfo.className];
