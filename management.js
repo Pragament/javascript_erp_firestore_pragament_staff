@@ -863,6 +863,180 @@ function clearMappingFilters() {
     renderMappings();
 }
 
+// Import mappings from timetable data
+async function importMappingsFromTimetable() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    try {
+        // Check if timetable exists in Firestore
+        const timetableDoc = await firestore.collection('timetables')
+            .doc(selectedSchool)
+            .collection('years')
+            .doc(selectedYear)
+            .get();
+        
+        let timetableData = null;
+        
+        if (timetableDoc.exists) {
+            timetableData = timetableDoc.data().timetableData;
+        } else {
+            // Try to load from localStorage
+            const localTimetable = localStorage.getItem('schoolTimetable');
+            const localYear = localStorage.getItem('timetableAcademicYear');
+            
+            if (localTimetable && localYear === selectedYear) {
+                timetableData = JSON.parse(localTimetable);
+            }
+        }
+        
+        if (!timetableData) {
+            alert('No timetable data found for this academic year. Please upload a timetable first or wait for Firestore data to load.');
+            return;
+        }
+        
+        // Extract mappings from timetable
+        const extractedMappings = extractMappingsFromTimetable(timetableData);
+        
+        if (extractedMappings.length === 0) {
+            alert('No teacher-subject mappings found in the timetable data.');
+            return;
+        }
+        
+        // Confirm import
+        const confirmed = confirm(
+            `Found ${extractedMappings.length} teacher-subject-class combinations in the timetable.\n\n` +
+            `Do you want to import these as formal mappings?\n\n` +
+            `Note: This will not overwrite existing mappings.`
+        );
+        
+        if (!confirmed) return;
+        
+        // Import mappings
+        let imported = 0;
+        let skipped = 0;
+        
+        for (const mapping of extractedMappings) {
+            // Check if mapping already exists
+            const exists = allMappings.some(m => 
+                m.teacherEmail === mapping.teacherEmail &&
+                m.subjectCode === mapping.subjectCode &&
+                m.classSections.includes(mapping.classSectionId)
+            );
+            
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            
+            // Create new mapping
+            const mappingData = {
+                teacherEmail: mapping.teacherEmail,
+                teacherName: mapping.teacherName,
+                subjectCode: mapping.subjectCode,
+                subjectName: mapping.subjectName,
+                classSections: [mapping.classSectionId],
+                academicYear: selectedYear,
+                effectiveFrom: new Date().toISOString().split('T')[0],
+                notes: `Imported from ${selectedYear} timetable`,
+                status: 'active',
+                importedFromTimetable: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            };
+            
+            try {
+                await firestore.collection('schools').doc(selectedSchool)
+                    .collection('teacherSubjectMappings').add(mappingData);
+                imported++;
+            } catch (err) {
+                console.error('Error importing mapping:', err);
+            }
+        }
+        
+        alert(`Import complete!\n\nImported: ${imported}\nSkipped (already exist): ${skipped}`);
+        
+        // Reload mappings
+        await loadMappings();
+        
+    } catch (error) {
+        console.error('Error importing from timetable:', error);
+        alert('Error importing mappings: ' + error.message);
+    }
+}
+
+// Extract mappings from timetable data
+function extractMappingsFromTimetable(timetableData) {
+    const mappings = [];
+    const mappingSet = new Set(); // To avoid duplicates
+    
+    // timetableData structure: { "1-A": { className: "1-A", days: [...] } }
+    for (const [className, classData] of Object.entries(timetableData)) {
+        if (!classData || !classData.days) continue;
+        
+        // Find class section ID
+        const classSection = allClassSections.find(cs => 
+            `${cs.grade}-${cs.section}` === className || cs.fullName === className
+        );
+        const classSectionId = classSection ? classSection.id : null;
+        
+        // Process each day
+        classData.days.forEach(day => {
+            if (!day.periods) return;
+            
+            day.periods.forEach(period => {
+                if (!period.teacherId && !period.teacherName) return;
+                if (!period.subject) return;
+                
+                // Determine teacher email/name
+                let teacherEmail = period.teacherId || period.teacherEmail;
+                let teacherName = period.teacherName || period.teacherId;
+                
+                // Try to find matching teacher in our database
+                const teacher = allTeachers.find(t => 
+                    t.email === teacherEmail || 
+                    t.name === teacherName ||
+                    t.email?.toLowerCase() === (teacherEmail || '').toLowerCase()
+                );
+                
+                if (teacher) {
+                    teacherEmail = teacher.email;
+                    teacherName = teacher.name;
+                }
+                
+                // Try to find matching subject
+                const subject = allSubjects.find(s => 
+                    s.name?.toLowerCase() === period.subject?.toLowerCase() ||
+                    s.code?.toLowerCase() === period.subject?.toLowerCase()
+                );
+                
+                const subjectCode = subject ? subject.code : period.subject;
+                const subjectName = subject ? subject.name : period.subject;
+                
+                // Create unique key for this mapping
+                const key = `${teacherEmail}|${subjectCode}|${classSectionId}`;
+                
+                if (!mappingSet.has(key)) {
+                    mappingSet.add(key);
+                    mappings.push({
+                        teacherEmail: teacherEmail || teacherName,
+                        teacherName: teacherName,
+                        subjectCode: subjectCode,
+                        subjectName: subjectName,
+                        classSectionId: classSectionId,
+                        className: className
+                    });
+                }
+            });
+        });
+    }
+    
+    return mappings;
+}
+
 // ============== HISTORY ==============
 
 async function loadHistory() {

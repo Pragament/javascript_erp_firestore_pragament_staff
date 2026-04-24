@@ -105,6 +105,18 @@ Click the **"Refresh"** button to reload assignments from Firestore.
 ### 3.5 Teacher-Subject Mappings
 This links teachers to the subjects they teach and the classes they handle:
 
+#### Option A: Import from Timetable (Recommended)
+If you already have a timetable uploaded, you can extract mappings automatically:
+
+1. Click on the **"Teacher-Subject Mappings"** tab
+2. Click **"Import from Timetable"** button
+3. The system will:
+   - Scan the existing timetable for teacher-subject-class combinations
+   - Match teachers and subjects with your database
+   - Create formal mappings automatically
+4. Review the import summary (shows imported vs skipped duplicates)
+
+#### Option B: Create Manually
 1. Click on the **"Teacher-Subject Mappings"** tab
 2. Click **"Create Mapping"**
 3. Select:
