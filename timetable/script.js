@@ -347,27 +347,29 @@
         
         // Set up event listeners
         function setupEventListeners() {
-            // Dashboard button
-            document.getElementById('dashboardBtn').addEventListener('click', function() {
-                alert("Redirecting to Dashboard...");
-            });
-
             // Push to Firestore button
-            document.getElementById('pushToFirestoreBtn').addEventListener('click', pushToFirestore);
+            const pushBtn = document.getElementById('pushToFirestoreBtn');
+            if (pushBtn) pushBtn.addEventListener('click', pushToFirestore);
+            
+            // Helper to safely add event listener
+            const addListener = (id, event, handler) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener(event, handler);
+            };
             
             // Holiday management
-            document.getElementById('addHolidayBtn').addEventListener('click', openAddHolidayModal);
-            document.getElementById('addFirstHolidayBtn').addEventListener('click', openAddHolidayModal);
-            document.getElementById('exportHolidaysBtn').addEventListener('click', exportHolidays);
-            document.getElementById('yearSelect').addEventListener('change', function() {
+            addListener('addHolidayBtn', 'click', openAddHolidayModal);
+            addListener('addFirstHolidayBtn', 'click', openAddHolidayModal);
+            addListener('exportHolidaysBtn', 'click', exportHolidays);
+            addListener('yearSelect', 'change', function() {
                 state.currentYear = this.value;
                 renderHolidays();
             });
             
             // Holiday modal
-            document.getElementById('closeHolidayModal').addEventListener('click', closeAddHolidayModal);
-            document.getElementById('cancelHolidayBtn').addEventListener('click', closeAddHolidayModal);
-            document.getElementById('saveHolidayBtn').addEventListener('click', saveHoliday);
+            addListener('closeHolidayModal', 'click', closeAddHolidayModal);
+            addListener('cancelHolidayBtn', 'click', closeAddHolidayModal);
+            addListener('saveHolidayBtn', 'click', saveHoliday);
             
             // File type selector
             document.querySelectorAll('.file-type-btn').forEach(btn => {
@@ -402,40 +404,40 @@
                 });
             });
             
-            document.getElementById('applyFilterBtn').addEventListener('click', renderTimetable);
-            document.getElementById('checkOverlapsBtn').addEventListener('click', runOverlapCheckWithProgress);
-            document.getElementById('exportOverlapsBtn').addEventListener('click', exportOverlapsCSV);
-            document.getElementById('exportTimetableBtn').addEventListener('click', exportTimetable);
-            document.getElementById('goToUploadBtn').addEventListener('click', function() {
+            addListener('applyFilterBtn', 'click', renderTimetable);
+            addListener('checkOverlapsBtn', 'click', runOverlapCheckWithProgress);
+            addListener('exportOverlapsBtn', 'click', exportOverlapsCSV);
+            addListener('exportTimetableBtn', 'click', exportTimetable);
+            addListener('goToUploadBtn', 'click', function() {
                 document.querySelector('.tab[data-target="upload-timetable-section"]').click();
             });
             
             // Upload timetable
-            document.getElementById('excelFormatSelect').addEventListener('change', function() {
+            addListener('excelFormatSelect', 'change', function() {
                 state.excelFormat = this.value;
             });
-            document.getElementById('excelFileInput').addEventListener('change', handleExcelUpload);
-            document.getElementById('csvFileInput').addEventListener('change', handleCSVUpload);
-            document.getElementById('subjectMappingFileInput').addEventListener('change', handleSubjectMappingUpload);
-            document.getElementById('downloadTemplateBtn').addEventListener('click', downloadTemplate);
+            addListener('excelFileInput', 'change', handleExcelUpload);
+            addListener('csvFileInput', 'change', handleCSVUpload);
+            addListener('subjectMappingFileInput', 'change', handleSubjectMappingUpload);
+            addListener('downloadTemplateBtn', 'click', downloadTemplate);
             
             // Time modal
-            document.getElementById('closeTimeModal').addEventListener('click', closeTimeInputModal);
-            document.getElementById('cancelTimeBtn').addEventListener('click', closeTimeInputModal);
-            document.getElementById('saveTimeBtn').addEventListener('click', savePeriodTimes);
+            addListener('closeTimeModal', 'click', closeTimeInputModal);
+            addListener('cancelTimeBtn', 'click', closeTimeInputModal);
+            addListener('saveTimeBtn', 'click', savePeriodTimes);
             
             // Modify timetable
-            document.getElementById('rescheduleModeBtn').addEventListener('click', toggleRescheduleMode);
-            document.getElementById('loadTimetableBtn').addEventListener('click', loadTimetableForModification);
+            addListener('rescheduleModeBtn', 'click', toggleRescheduleMode);
+            addListener('loadTimetableBtn', 'click', loadTimetableForModification);
             
             // Teacher schedule
-            document.getElementById('loadTeacherScheduleBtn').addEventListener('click', loadTeacherSchedule);
-            document.getElementById('exportTeacherScheduleBtn').addEventListener('click', exportTeacherSchedule);
+            addListener('loadTeacherScheduleBtn', 'click', loadTeacherSchedule);
+            addListener('exportTeacherScheduleBtn', 'click', exportTeacherSchedule);
             
             // Reschedule modal
-            document.getElementById('closeRescheduleModal').addEventListener('click', closeRescheduleModal);
-            document.getElementById('cancelRescheduleBtn').addEventListener('click', closeRescheduleModal);
-            document.getElementById('confirmRescheduleBtn').addEventListener('click', confirmReschedule);
+            addListener('closeRescheduleModal', 'click', closeRescheduleModal);
+            addListener('cancelRescheduleBtn', 'click', closeRescheduleModal);
+            addListener('confirmRescheduleBtn', 'click', confirmReschedule);
         }
         
         // Initialize the UI
