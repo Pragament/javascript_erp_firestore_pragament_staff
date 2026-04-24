@@ -496,6 +496,12 @@
             addListener('closeRescheduleModal', 'click', closeRescheduleModal);
             addListener('cancelRescheduleBtn', 'click', closeRescheduleModal);
             addListener('confirmRescheduleBtn', 'click', confirmReschedule);
+            
+            // Copy year modal
+            addListener('copyYearBtn', 'click', openCopyYearModal);
+            addListener('closeCopyYearModal', 'click', closeCopyYearModal);
+            addListener('cancelCopyYearBtn', 'click', closeCopyYearModal);
+            addListener('confirmCopyYearBtn', 'click', confirmCopyYear);
         }
         
         // Initialize the UI

@@ -37,6 +37,9 @@
                 <button id="pushToFirestoreBtn" class="btn btn-success btn-sm" style="display: none;">
                     <i class="bi bi-cloud-upload"></i> Push
                 </button>
+                <button id="copyYearBtn" class="btn btn-info btn-sm text-white" title="Copy timetable to another year">
+                    <i class="bi bi-copy"></i> Copy Year
+                </button>
                 <a href="../index.html" class="btn btn-outline-light btn-sm">
                     <i class="bi bi-arrow-left"></i> Dashboard
                 </a>
@@ -431,6 +434,47 @@
             <div class="modal-footer">
                 <button class="btn btn-danger" id="cancelRescheduleBtn">Cancel</button>
                 <button class="btn btn-success" id="confirmRescheduleBtn">Confirm Swap</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Copy Year Modal -->
+    <div class="modal" id="copyYearModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="bi bi-copy"></i> Copy Timetable to Another Year</h3>
+                <button class="close-modal" id="closeCopyYearModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Copy the current timetable data to a different academic year.</p>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 5px;">Source Year:</label>
+                    <select id="copySourceYear" class="form-select" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+                        <option value="">Select source year</option>
+                        <option value="2024-25">2024-25</option>
+                        <option value="2025-26">2025-26</option>
+                        <option value="2026-27">2026-27</option>
+                        <option value="2027-28">2027-28</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 5px;">Target Year:</label>
+                    <select id="copyTargetYear" class="form-select" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+                        <option value="">Select target year</option>
+                        <option value="2024-25">2024-25</option>
+                        <option value="2025-26">2025-26</option>
+                        <option value="2026-27">2026-27</option>
+                        <option value="2027-28">2027-28</option>
+                    </select>
+                </div>
+                <div id="copyYearError" style="color: #dc3545; display: none; margin-bottom: 10px;"></div>
+                <div id="copyYearInfo" style="background-color: #e3f2fd; padding: 10px; border-radius: 5px; font-size: 0.9rem;">
+                    <i class="bi bi-info-circle"></i> This will copy: timetable data, holidays, period times, and teacher mappings.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="cancelCopyYearBtn">Cancel</button>
+                <button class="btn btn-success" id="confirmCopyYearBtn">Copy Timetable</button>
             </div>
         </div>
     </div>
