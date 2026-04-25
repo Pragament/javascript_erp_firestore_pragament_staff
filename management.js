@@ -554,6 +554,10 @@ async function loadClassSections() {
             .get();
         
         allClassSections = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Save to localStorage for timetable page access
+        localStorage.setItem('classSections', JSON.stringify(allClassSections));
+        
         renderClassSections();
         updateMappingClassOptions();
     } catch (error) {
@@ -717,6 +721,10 @@ async function loadMappings() {
             .get();
         
         allMappings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Save to localStorage for timetable page access
+        localStorage.setItem('teacherSubjectMappings', JSON.stringify(allMappings));
+        
         renderMappings();
     } catch (error) {
         console.error('Error loading mappings:', error);
