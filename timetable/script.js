@@ -517,6 +517,7 @@
             addListener('filterIssueTeacher', 'input', renderMappingIssuesTable);
             addListener('filterIssueSubject', 'input', renderMappingIssuesTable);
             addListener('filterIssueType', 'change', renderMappingIssuesTable);
+            addListener('filterExcludePeriods', 'change', renderMappingIssuesTable);
         }
         
         // Initialize the UI
@@ -2354,6 +2355,14 @@
                 </span>
             `;
             
+            // Populate periods dropdown
+            const periodsSelect = document.getElementById('filterExcludePeriods');
+            const allPeriods = [...new Set(issues.map(i => i.period))].sort();
+            periodsSelect.innerHTML = allPeriods.map(p => `<option value="${p}">${p}</option>`).join('');
+            
+            // Reset to page 1
+            state.mappingIssuesPage = 1;
+            
             // Render table
             renderMappingIssuesTable();
             
@@ -2372,6 +2381,8 @@
             document.getElementById('filterIssueTeacher').value = '';
             document.getElementById('filterIssueSubject').value = '';
             document.getElementById('filterIssueType').value = '';
+            document.getElementById('filterExcludePeriods').selectedIndex = -1;
+            state.mappingIssuesPage = 1;
             renderMappingIssuesTable();
         }
         
@@ -2385,11 +2396,16 @@
             const filterSubject = document.getElementById('filterIssueSubject').value.toLowerCase();
             const filterType = document.getElementById('filterIssueType').value;
             
+            // Get excluded periods
+            const excludePeriodsSelect = document.getElementById('filterExcludePeriods');
+            const excludedPeriods = Array.from(excludePeriodsSelect.selectedOptions).map(opt => opt.value);
+            
             issues = issues.filter(issue => {
                 if (filterClass && !issue.className.toLowerCase().includes(filterClass)) return false;
                 if (filterTeacher && !(issue.teacherName || issue.teacherId).toLowerCase().includes(filterTeacher)) return false;
                 if (filterSubject && !issue.subject.toLowerCase().includes(filterSubject)) return false;
                 if (filterType && issue.type !== filterType) return false;
+                if (excludedPeriods.includes(issue.period)) return false;
                 return true;
             });
             

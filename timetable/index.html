@@ -534,16 +534,23 @@
                 </div>
                 
                 <!-- Filters -->
-                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <input type="text" id="filterIssueClass" class="form-control" placeholder="Filter by Class" style="width: 150px;">
-                    <input type="text" id="filterIssueTeacher" class="form-control" placeholder="Filter by Teacher" style="width: 150px;">
-                    <input type="text" id="filterIssueSubject" class="form-control" placeholder="Filter by Subject" style="width: 150px;">
-                    <select id="filterIssueType" class="form-control" style="width: 150px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: flex-start;">
+                    <input type="text" id="filterIssueClass" class="form-control" placeholder="Filter by Class" style="width: 140px;">
+                    <input type="text" id="filterIssueTeacher" class="form-control" placeholder="Filter by Teacher" style="width: 140px;">
+                    <input type="text" id="filterIssueSubject" class="form-control" placeholder="Filter by Subject" style="width: 140px;">
+                    <select id="filterIssueType" class="form-control" style="width: 140px;">
                         <option value="">All Issue Types</option>
                         <option value="missing_mapping">Missing Mapping</option>
                         <option value="invalid_class">Invalid Class</option>
                     </select>
-                    <button class="btn btn-outline-secondary" onclick="clearMappingIssueFilters()">
+                    <div style="width: 200px;">
+                        <label style="font-size: 0.8rem; color: #6c757d; margin-bottom: 2px; display: block;">Exclude Periods:</label>
+                        <select id="filterExcludePeriods" class="form-control" multiple style="height: 60px; font-size: 0.85rem;">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small style="color: #6c757d; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple</small>
+                    </div>
+                    <button class="btn btn-outline-secondary" onclick="clearMappingIssueFilters()" style="margin-top: 18px;">
                         <i class="fas fa-times"></i> Clear
                     </button>
                 </div>
