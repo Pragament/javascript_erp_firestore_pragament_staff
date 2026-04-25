@@ -464,6 +464,7 @@
             
             addListener('applyFilterBtn', 'click', renderTimetable);
             addListener('checkOverlapsBtn', 'click', runOverlapCheckWithProgress);
+            addListener('checkMappingsBtn', 'click', checkMappings);
             addListener('exportOverlapsBtn', 'click', exportOverlapsCSV);
             addListener('exportTimetableBtn', 'click', exportTimetable);
             addListener('goToUploadBtn', 'click', function() {
@@ -2215,6 +2216,165 @@
                 checkBtn.innerHTML = originalCheckLabel;
                 state.overlapCheckInProgress = false;
                 setTimeout(() => updateOverlapProgress('', 0, false), 900);
+            }
+        }
+        
+        // Check Teacher-Subject-Class Mappings against loaded mappings from management
+        function checkMappings() {
+            if (!state.timetableData) {
+                alert("No timetable data loaded. Please upload a timetable first.");
+                return;
+            }
+            
+            // Get mappings from localStorage (loaded from management page)
+            const mappingsJson = localStorage.getItem('teacherSubjectMappings');
+            const selectedSchool = localStorage.getItem('selectedSchool');
+            const selectedYear = localStorage.getItem('selectedAcademicYear');
+            
+            if (!mappingsJson) {
+                alert("No teacher-subject-class mappings found. Please go to Management page and load mappings first.");
+                return;
+            }
+            
+            let mappings;
+            try {
+                mappings = JSON.parse(mappingsJson);
+            } catch (e) {
+                alert("Error parsing mappings data.");
+                return;
+            }
+            
+            if (!Array.isArray(mappings) || mappings.length === 0) {
+                alert("No mappings found. Please ensure mappings are loaded from the Management page.");
+                return;
+            }
+            
+            // Build a lookup for valid mappings: teacher+subject -> classSections[]
+            const validMappings = new Map();
+            mappings.forEach(m => {
+                if (!m.teacherEmail || !m.subjectCode) return;
+                const key = `${m.teacherEmail.toLowerCase()}|${m.subjectCode.toLowerCase()}`;
+                if (!validMappings.has(key)) {
+                    validMappings.set(key, new Set());
+                }
+                // Add all class sections for this mapping
+                if (m.classSections && Array.isArray(m.classSections)) {
+                    m.classSections.forEach(cs => validMappings.get(key).add(cs));
+                }
+            });
+            
+            // Check each period in timetable against valid mappings
+            const issues = [];
+            const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            Object.entries(state.timetableData).forEach(([className, classData]) => {
+                if (!classData || !classData.days) return;
+                
+                // Find class section ID for this class name
+                const classSection = findClassSectionByName(className);
+                const classSectionId = classSection ? classSection.id : null;
+                
+                classData.days.forEach(day => {
+                    if (!day.periods) return;
+                    
+                    day.periods.forEach((period, periodIndex) => {
+                        if (!period.teacherId || !period.subject) return;
+                        
+                        const teacherEmail = period.teacherId.toLowerCase();
+                        const subjectCode = period.subject.toLowerCase();
+                        const key = `${teacherEmail}|${subjectCode}`;
+                        
+                        // Check if this teacher-subject mapping exists
+                        if (!validMappings.has(key)) {
+                            issues.push({
+                                type: 'missing_mapping',
+                                className,
+                                day: day.dayName,
+                                period: `P${periodIndex + 1}`,
+                                teacherId: period.teacherId,
+                                teacherName: period.teacherName,
+                                subject: period.subject,
+                                message: `Teacher "${period.teacherName || period.teacherId}" teaching "${period.subject}" has no valid mapping`
+                            });
+                        } else if (classSectionId) {
+                            // Check if this class section is in the allowed list
+                            const allowedClasses = validMappings.get(key);
+                            if (!allowedClasses.has(classSectionId)) {
+                                issues.push({
+                                    type: 'invalid_class',
+                                    className,
+                                    day: day.dayName,
+                                    period: `P${periodIndex + 1}`,
+                                    teacherId: period.teacherId,
+                                    teacherName: period.teacherName,
+                                    subject: period.subject,
+                                    message: `Teacher "${period.teacherName || period.teacherId}" is not mapped to teach "${period.subject}" in ${className}`
+                                });
+                            }
+                        }
+                    });
+                });
+            });
+            
+            // Show results
+            if (issues.length === 0) {
+                alert(`✅ All timetable entries match valid teacher-subject-class mappings!\n\nChecked against ${mappings.length} mapping(s) for ${selectedYear || 'current year'}.`);
+            } else {
+                const missingMappings = issues.filter(i => i.type === 'missing_mapping').length;
+                const invalidClasses = issues.filter(i => i.type === 'invalid_class').length;
+                
+                let message = `⚠️ Found ${issues.length} mapping issue(s):\n\n`;
+                if (missingMappings > 0) message += `- ${missingMappings} teacher(s) without valid mapping\n`;
+                if (invalidClasses > 0) message += `- ${invalidClasses} class(es) where teacher is not authorized to teach the subject\n`;
+                message += `\nSample issues:\n`;
+                
+                // Show first 5 issues
+                issues.slice(0, 5).forEach((issue, idx) => {
+                    message += `${idx + 1}. ${issue.className} - ${issue.day} ${issue.period}: ${issue.message}\n`;
+                });
+                
+                if (issues.length > 5) {
+                    message += `\n... and ${issues.length - 5} more issues.`;
+                }
+                
+                message += `\n\nGo to Management > Teacher-Subject-Class Mappings to fix these issues.`;
+                alert(message);
+            }
+            
+            // Store issues for potential export
+            state.mappingIssues = issues;
+        }
+        
+        // Helper function to find class section by name
+        function findClassSectionByName(className) {
+            // Try to get class sections from localStorage
+            const classSectionsJson = localStorage.getItem('classSections');
+            if (!classSectionsJson) return null;
+            
+            try {
+                const classSections = JSON.parse(classSectionsJson);
+                if (!Array.isArray(classSections)) return null;
+                
+                // Try exact match first
+                let match = classSections.find(cs => cs.fullName === className);
+                if (match) return match;
+                
+                // Try grade-section match
+                const parts = className.split('-');
+                if (parts.length >= 2) {
+                    const grade = parts[0];
+                    const section = parts[1];
+                    match = classSections.find(cs => 
+                        cs.grade === grade && 
+                        cs.section?.toUpperCase() === section.toUpperCase()
+                    );
+                    if (match) return match;
+                }
+                
+                return null;
+            } catch (e) {
+                console.error('Error finding class section:', e);
+                return null;
             }
         }
         
