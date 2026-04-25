@@ -239,6 +239,10 @@ async function loadTeachers() {
             .get();
         
         allTeachers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Save to localStorage for timetable page access
+        localStorage.setItem('teachers', JSON.stringify(allTeachers));
+        
         renderTeachers();
         updateTeacherFilterOptions();
     } catch (error) {

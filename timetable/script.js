@@ -2237,8 +2237,9 @@
                 return;
             }
             
-            // Get mappings from localStorage (loaded from management page)
+            // Get mappings and teachers from localStorage (loaded from management page)
             const mappingsJson = localStorage.getItem('teacherSubjectMappings');
+            const teachersJson = localStorage.getItem('teachers');
             const selectedSchool = localStorage.getItem('selectedSchool');
             const selectedYear = localStorage.getItem('selectedAcademicYear');
             
@@ -2248,10 +2249,14 @@
             }
             
             let mappings;
+            let teachers = [];
             try {
                 mappings = JSON.parse(mappingsJson);
+                if (teachersJson) {
+                    teachers = JSON.parse(teachersJson);
+                }
             } catch (e) {
-                alert("Error parsing mappings data.");
+                alert("Error parsing mappings or teachers data.");
                 return;
             }
             
@@ -2260,11 +2265,30 @@
                 return;
             }
             
-            // Build a lookup for valid mappings: teacher+subject -> classSections[]
+            // Build teacher lookup: teacherId or name -> teacherEmail
+            const teacherLookup = new Map();
+            teachers.forEach(t => {
+                if (t.email) {
+                    // Map by email itself
+                    teacherLookup.set(t.email.toLowerCase(), t.email.toLowerCase());
+                    // Map by teacher code (e.g., T001)
+                    if (t.teacherCode) {
+                        teacherLookup.set(t.teacherCode.toLowerCase(), t.email.toLowerCase());
+                    }
+                    // Map by name
+                    if (t.name) {
+                        teacherLookup.set(t.name.toLowerCase(), t.email.toLowerCase());
+                    }
+                }
+            });
+            
+            // Build a lookup for valid mappings: teacherEmail+subject -> classSections[]
             const validMappings = new Map();
             mappings.forEach(m => {
                 if (!m.teacherEmail || !m.subjectCode) return;
-                const key = `${m.teacherEmail.toLowerCase()}|${m.subjectCode.toLowerCase()}`;
+                const teacherEmail = m.teacherEmail.toLowerCase();
+                const subjectCode = m.subjectCode.toLowerCase();
+                const key = `${teacherEmail}|${subjectCode}`;
                 if (!validMappings.has(key)) {
                     validMappings.set(key, new Set());
                 }
@@ -2291,7 +2315,15 @@
                     day.periods.forEach((period, periodIndex) => {
                         if (!period.teacherId || !period.subject) return;
                         
-                        const teacherEmail = period.teacherId.toLowerCase();
+                        // Look up teacher email from teacherId or teacherName
+                        const teacherIdOrName = period.teacherId.toLowerCase();
+                        const teacherName = (period.teacherName || '').toLowerCase();
+                        
+                        // Try to find teacher email from lookup
+                        let teacherEmail = teacherLookup.get(teacherIdOrName) || 
+                                          teacherLookup.get(teacherName) ||
+                                          teacherIdOrName; // fallback to ID if no match
+                        
                         const subjectCode = period.subject.toLowerCase();
                         const key = `${teacherEmail}|${subjectCode}`;
                         
