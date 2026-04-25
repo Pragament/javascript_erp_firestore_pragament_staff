@@ -29,6 +29,8 @@ let allMappings = [];
 let allHistory = [];
 let selectedPeriods = []; // Store selected periods for import
 let tempTimetableData = null; // Store timetable data during import
+let tempExtractedMappings = null; // Store extracted mappings for import
+let currentMappingIndex = 0; // Current mapping being reviewed
 
 // Bootstrap modals
 let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal, periodSelectionModal;
@@ -805,6 +807,9 @@ function openMappingModal(mappingId = null) {
         return;
     }
     
+    // Reset footer to normal mode (in case we were in import mode)
+    resetMappingModalFooter();
+    
     document.getElementById('mappingForm').reset();
     document.getElementById('mappingId').value = '';
     document.getElementById('mapAcademicYear').value = selectedYear;
@@ -1120,7 +1125,7 @@ async function proceedWithImport(selectedPeriodNames) {
             await loadClassSections();
         }
         
-        // Extract mappings with period filtering
+        // Extract mappings with period filtering (grouped by teacher-subject)
         const extractedMappings = extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNames);
         
         if (extractedMappings.length === 0) {
@@ -1128,76 +1133,258 @@ async function proceedWithImport(selectedPeriodNames) {
             return;
         }
         
-        // Confirm import
-        let confirmMsg = `Found ${extractedMappings.length} teacher-subject-class combinations in the timetable.`;
+        // Store extracted mappings for confirmation modal
+        tempExtractedMappings = extractedMappings;
+        
+        // Show confirmation message
+        let confirmMsg = `Found ${extractedMappings.length} teacher-subject combinations in the timetable.`;
         if (importedClasses > 0) {
             confirmMsg += `\nAlso auto-imported ${importedClasses} class sections.`;
         }
-        confirmMsg += `\n\nDo you want to import these as formal mappings?\n\nNote: This will not overwrite existing mappings.`;
+        confirmMsg += `\n\nDo you want to review and import these mappings?\n\nNote: This will not overwrite existing mappings.`;
         
         const confirmed = confirm(confirmMsg);
         
-        if (!confirmed) return;
-        
-        // Import mappings
-        let imported = 0;
-        let skipped = 0;
-        
-        for (const mapping of extractedMappings) {
-            // Check if mapping already exists
-            const exists = allMappings.some(m => 
-                m.teacherEmail === mapping.teacherEmail &&
-                m.subjectCode === mapping.subjectCode &&
-                m.classSections.includes(mapping.classSectionId)
-            );
-            
-            if (exists) {
-                skipped++;
-                continue;
-            }
-            
-            // Create new mapping
-            const mappingData = {
-                teacherEmail: mapping.teacherEmail,
-                teacherName: mapping.teacherName,
-                subjectCode: mapping.subjectCode,
-                subjectName: mapping.subjectName,
-                classSections: [mapping.classSectionId],
-                academicYear: selectedYear,
-                effectiveFrom: new Date().toISOString().split('T')[0],
-                notes: `Imported from ${selectedYear} timetable`,
-                status: 'active',
-                importedFromTimetable: true,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedBy: currentUser.email
-            };
-            
-            try {
-                await firestore.collection('schools').doc(selectedSchool)
-                    .collection('teacherSubjectMappings').add(mappingData);
-                imported++;
-            } catch (err) {
-                console.error('Error importing mapping:', err);
-            }
+        if (!confirmed) {
+            tempExtractedMappings = null;
+            return;
         }
         
-        let alertMsg = `Import complete!\n\nMappings imported: ${imported}\nMappings skipped: ${skipped}`;
-        if (importedClasses > 0) {
-            alertMsg += `\nClass sections auto-imported: ${importedClasses}`;
-        }
-        alert(alertMsg);
-        
-        // Reload mappings and class sections
-        await loadMappings();
-        if (importedClasses > 0) {
-            await loadClassSections();
-        }
+        // Show mapping confirmation modal with first mapping
+        currentMappingIndex = 0;
+        showMappingConfirmationModal();
         
     } catch (error) {
         console.error('Error importing from timetable:', error);
         alert('Error importing mappings: ' + error.message);
     }
+}
+
+// Show mapping confirmation modal with extracted data
+function showMappingConfirmationModal() {
+    if (!tempExtractedMappings || tempExtractedMappings.length === 0) {
+        alert('No mappings to import.');
+        return;
+    }
+    
+    const mapping = tempExtractedMappings[currentMappingIndex];
+    const totalMappings = tempExtractedMappings.length;
+    
+    // Set modal title with progress
+    document.getElementById('mappingModalTitle').textContent = 
+        `Import Mapping (${currentMappingIndex + 1} of ${totalMappings})`;
+    
+    // Set academic year
+    document.getElementById('mapAcademicYear').value = selectedYear;
+    document.getElementById('mapEffectiveFrom').value = new Date().toISOString().split('T')[0];
+    
+    // Populate teacher dropdown and pre-select
+    const teacherSelect = document.getElementById('mapTeacher');
+    const teacherOptions = allTeachers.filter(t => t.status === 'active').map(t => 
+        `<option value="${t.email}" ${t.email === mapping.teacherEmail ? 'selected' : ''}>${t.name}</option>`
+    ).join('');
+    teacherSelect.innerHTML = '<option value="">Select Teacher</option>' + teacherOptions;
+    
+    // If teacher not found, add as option
+    if (!allTeachers.some(t => t.email === mapping.teacherEmail)) {
+        teacherSelect.innerHTML += `<option value="${mapping.teacherEmail}" selected>${mapping.teacherName} (${mapping.teacherEmail})</option>`;
+    }
+    
+    // Populate subject dropdown and pre-select
+    const subjectSelect = document.getElementById('mapSubject');
+    const subjectOptions = allSubjects.filter(s => s.status === 'active').map(s => 
+        `<option value="${s.code}" ${s.code === mapping.subjectCode ? 'selected' : ''}>${s.name} (${s.code})</option>`
+    ).join('');
+    subjectSelect.innerHTML = '<option value="">Select Subject</option>' + subjectOptions;
+    
+    // If subject not found, add as option
+    if (!allSubjects.some(s => s.code === mapping.subjectCode)) {
+        subjectSelect.innerHTML += `<option value="${mapping.subjectCode}" selected>${mapping.subjectName} (${mapping.subjectCode})</option>`;
+    }
+    
+    // Populate class sections checkboxes with pre-selected from timetable
+    const classContainer = document.getElementById('mapClassSections');
+    const preselectedIds = new Set(mapping.classSectionIds);
+    
+    if (allClassSections.length === 0) {
+        classContainer.innerHTML = '<div class="text-muted small">No class sections available for this year</div>';
+    } else {
+        classContainer.innerHTML = allClassSections.map(cs => {
+            const isSelected = preselectedIds.has(cs.id);
+            const isInTimetable = mapping.classSections.some(c => c.id === cs.id);
+            const labelClass = isInTimetable ? 'fw-bold' : '';
+            return `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${cs.id}" 
+                           id="class_${cs.id}" name="mappingClasses" 
+                           ${isSelected ? 'checked' : ''}>
+                    <label class="form-check-label ${labelClass}" for="class_${cs.id}">
+                        Grade ${cs.grade}-${cs.section}${isInTimetable ? ' (from timetable)' : ''}
+                    </label>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // Clear mapping ID (this is a new mapping)
+    document.getElementById('mappingId').value = '';
+    
+    // Add navigation buttons to modal footer
+    updateMappingModalFooter();
+    
+    mappingModal.show();
+}
+
+// Update modal footer with navigation buttons
+function updateMappingModalFooter() {
+    const modalFooter = document.querySelector('#mappingModal .modal-footer');
+    const totalMappings = tempExtractedMappings ? tempExtractedMappings.length : 0;
+    
+    // Save the original Save button
+    const saveBtn = modalFooter.querySelector('#saveMappingBtn');
+    if (!saveBtn) {
+        // If no save button exists, create one
+        const newSaveBtn = document.createElement('button');
+        newSaveBtn.type = 'button';
+        newSaveBtn.className = 'btn btn-primary';
+        newSaveBtn.id = 'saveMappingBtn';
+        newSaveBtn.textContent = 'Save & Next';
+        newSaveBtn.onclick = saveMappingFromImport;
+        modalFooter.appendChild(newSaveBtn);
+    } else {
+        saveBtn.textContent = currentMappingIndex < totalMappings - 1 ? 'Save & Next' : 'Save & Finish';
+        saveBtn.onclick = saveMappingFromImport;
+    }
+    
+    // Add Skip button if not exists
+    let skipBtn = document.getElementById('skipMappingBtn');
+    if (!skipBtn) {
+        skipBtn = document.createElement('button');
+        skipBtn.type = 'button';
+        skipBtn.className = 'btn btn-outline-secondary';
+        skipBtn.id = 'skipMappingBtn';
+        skipBtn.textContent = 'Skip';
+        skipBtn.onclick = skipMapping;
+        modalFooter.insertBefore(skipBtn, saveBtn);
+    }
+    
+    // Add Cancel All button if not exists
+    let cancelAllBtn = document.getElementById('cancelAllMappingsBtn');
+    if (!cancelAllBtn) {
+        cancelAllBtn = document.createElement('button');
+        cancelAllBtn.type = 'button';
+        cancelAllBtn.className = 'btn btn-outline-danger';
+        cancelAllBtn.id = 'cancelAllMappingsBtn';
+        cancelAllBtn.textContent = 'Cancel All';
+        cancelAllBtn.onclick = cancelAllMappings;
+        modalFooter.insertBefore(cancelAllBtn, skipBtn);
+    }
+}
+
+// Skip current mapping and go to next
+function skipMapping() {
+    currentMappingIndex++;
+    if (currentMappingIndex < tempExtractedMappings.length) {
+        showMappingConfirmationModal();
+    } else {
+        finishImport();
+    }
+}
+
+// Cancel all remaining mappings
+function cancelAllMappings() {
+    if (confirm('Are you sure you want to cancel importing the remaining mappings?')) {
+        tempExtractedMappings = null;
+        currentMappingIndex = 0;
+        mappingModal.hide();
+        resetMappingModalFooter();
+    }
+}
+
+// Reset modal footer to original state
+function resetMappingModalFooter() {
+    const modalFooter = document.querySelector('#mappingModal .modal-footer');
+    
+    // Remove extra buttons
+    const skipBtn = document.getElementById('skipMappingBtn');
+    const cancelAllBtn = document.getElementById('cancelAllMappingsBtn');
+    if (skipBtn) skipBtn.remove();
+    if (cancelAllBtn) cancelAllBtn.remove();
+    
+    // Reset save button
+    const saveBtn = document.getElementById('saveMappingBtn');
+    if (saveBtn) {
+        saveBtn.textContent = 'Save Mapping';
+        saveBtn.onclick = saveMapping;
+    }
+}
+
+// Save mapping from import flow and proceed to next
+async function saveMappingFromImport() {
+    if (!selectedSchool || !selectedYear) {
+        alert('Please select a school and academic year first');
+        return;
+    }
+    
+    const teacherEmail = document.getElementById('mapTeacher').value;
+    const subjectCode = document.getElementById('mapSubject').value;
+    
+    // Get selected class sections
+    const selectedClasses = Array.from(document.querySelectorAll('input[name="mappingClasses"]:checked'))
+        .map(cb => cb.value);
+    
+    if (!teacherEmail || !subjectCode || selectedClasses.length === 0) {
+        alert('Please select teacher, subject, and at least one class section');
+        return;
+    }
+    
+    const teacher = allTeachers.find(t => t.email === teacherEmail);
+    const subject = allSubjects.find(s => s.code === subjectCode);
+    
+    const data = {
+        teacherEmail: teacherEmail,
+        teacherName: teacher ? teacher.name : teacherEmail,
+        subjectCode: subjectCode,
+        subjectName: subject ? subject.name : subjectCode,
+        classSections: selectedClasses,
+        academicYear: selectedYear,
+        effectiveFrom: document.getElementById('mapEffectiveFrom').value || new Date().toISOString().split('T')[0],
+        notes: document.getElementById('mapNotes').value || `Imported from ${selectedYear} timetable`,
+        status: 'active',
+        importedFromTimetable: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email
+    };
+    
+    try {
+        await firestore.collection('schools').doc(selectedSchool)
+            .collection('teacherSubjectMappings').add(data);
+        
+        // Move to next mapping
+        currentMappingIndex++;
+        
+        if (currentMappingIndex < tempExtractedMappings.length) {
+            showMappingConfirmationModal();
+        } else {
+            finishImport();
+        }
+        
+    } catch (error) {
+        console.error('Error saving mapping:', error);
+        alert('Error saving mapping: ' + error.message);
+    }
+}
+
+// Finish import and cleanup
+async function finishImport() {
+    tempExtractedMappings = null;
+    currentMappingIndex = 0;
+    mappingModal.hide();
+    resetMappingModalFooter();
+    
+    await loadMappings();
+    alert('Import completed successfully!');
 }
 
 // Extract mappings from timetable data
@@ -1288,9 +1475,9 @@ function extractMappingsFromTimetable(timetableData) {
 }
 
 // Extract mappings from timetable with period filtering
+// Groups by teacher-subject (1 teacher can teach 1 subject for multiple class-sections)
 function extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNames) {
-    const mappings = [];
-    const mappingSet = new Set(); // To avoid duplicates
+    const mappingMap = new Map(); // Group by teacher-subject
     
     // Convert to Set for faster lookup
     const selectedPeriodsSet = new Set(selectedPeriodNames);
@@ -1314,6 +1501,7 @@ function extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNa
         }
         
         const classSectionId = classSection ? classSection.id : null;
+        if (!classSectionId) continue; // Skip if no class section found
         
         // Process each day
         classData.days.forEach(day => {
@@ -1355,25 +1543,40 @@ function extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNa
                 const subjectCode = subject ? subject.code : period.subject;
                 const subjectName = subject ? subject.name : period.subject;
                 
-                // Create unique key for this mapping
-                const key = `${teacherEmail}|${subjectCode}|${classSectionId}`;
+                // Group by teacher-subject
+                const key = `${teacherEmail}|${subjectCode}`;
                 
-                if (!mappingSet.has(key)) {
-                    mappingSet.add(key);
-                    mappings.push({
+                if (!mappingMap.has(key)) {
+                    mappingMap.set(key, {
                         teacherEmail: teacherEmail || teacherName,
                         teacherName: teacherName,
                         subjectCode: subjectCode,
                         subjectName: subjectName,
-                        classSectionId: classSectionId,
-                        className: className
+                        classSections: [],
+                        classSectionIds: new Set()
+                    });
+                }
+                
+                const mapping = mappingMap.get(key);
+                // Add class section if not already included
+                if (!mapping.classSectionIds.has(classSectionId)) {
+                    mapping.classSectionIds.add(classSectionId);
+                    mapping.classSections.push({
+                        id: classSectionId,
+                        name: className,
+                        grade: classSection?.grade || '',
+                        section: classSection?.section || ''
                     });
                 }
             });
         });
     }
     
-    return mappings;
+    // Convert Map to array and convert Sets to arrays
+    return Array.from(mappingMap.values()).map(m => ({
+        ...m,
+        classSectionIds: Array.from(m.classSectionIds)
+    }));
 }
 
 // Import Teachers from timetable
