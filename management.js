@@ -1133,26 +1133,26 @@ async function proceedWithImport(selectedPeriodNames) {
             return;
         }
         
-        // Store extracted mappings for confirmation modal
+        // Store extracted mappings for import
         tempExtractedMappings = extractedMappings;
         
-        // Show confirmation message
+        // Show confirmation dialog with Save All or Review options
         let confirmMsg = `Found ${extractedMappings.length} teacher-subject combinations in the timetable.`;
         if (importedClasses > 0) {
             confirmMsg += `\nAlso auto-imported ${importedClasses} class sections.`;
         }
-        confirmMsg += `\n\nDo you want to review and import these mappings?\n\nNote: This will not overwrite existing mappings.`;
+        confirmMsg += `\n\nHow would you like to import these mappings?\n\nNote: Existing mappings will not be overwritten.`;
         
-        const confirmed = confirm(confirmMsg);
+        const userChoice = confirm(confirmMsg + '\n\nClick OK to Save All at once,\nClick Cancel to Review one by one.');
         
-        if (!confirmed) {
-            tempExtractedMappings = null;
-            return;
+        if (userChoice) {
+            // Save all at once
+            await saveAllMappings();
+        } else {
+            // Review one by one
+            currentMappingIndex = 0;
+            showMappingConfirmationModal();
         }
-        
-        // Show mapping confirmation modal with first mapping
-        currentMappingIndex = 0;
-        showMappingConfirmationModal();
         
     } catch (error) {
         console.error('Error importing from timetable:', error);
@@ -1385,6 +1385,87 @@ async function finishImport() {
     
     await loadMappings();
     alert('Import completed successfully!');
+}
+
+// Save all mappings at once without preview
+async function saveAllMappings() {
+    if (!tempExtractedMappings || tempExtractedMappings.length === 0) {
+        alert('No mappings to import.');
+        return;
+    }
+    
+    let imported = 0;
+    let skipped = 0;
+    let errors = 0;
+    
+    for (const mapping of tempExtractedMappings) {
+        // Check if teacher and subject exist in database
+        const teacher = allTeachers.find(t => t.email === mapping.teacherEmail);
+        const subject = allSubjects.find(s => s.code === mapping.subjectCode);
+        
+        // Skip if no class sections
+        if (!mapping.classSectionIds || mapping.classSectionIds.length === 0) {
+            skipped++;
+            continue;
+        }
+        
+        // Check if mapping already exists
+        const exists = allMappings.some(m => 
+            m.teacherEmail === mapping.teacherEmail &&
+            m.subjectCode === mapping.subjectCode &&
+            arraysHaveCommonElement(m.classSections, mapping.classSectionIds)
+        );
+        
+        if (exists) {
+            skipped++;
+            continue;
+        }
+        
+        // Create new mapping
+        const mappingData = {
+            teacherEmail: mapping.teacherEmail,
+            teacherName: teacher ? teacher.name : mapping.teacherName,
+            subjectCode: mapping.subjectCode,
+            subjectName: subject ? subject.name : mapping.subjectName,
+            classSections: mapping.classSectionIds,
+            academicYear: selectedYear,
+            effectiveFrom: new Date().toISOString().split('T')[0],
+            notes: `Imported from ${selectedYear} timetable (batch import)`,
+            status: 'active',
+            importedFromTimetable: true,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: currentUser.email
+        };
+        
+        try {
+            await firestore.collection('schools').doc(selectedSchool)
+                .collection('teacherSubjectMappings').add(mappingData);
+            imported++;
+        } catch (err) {
+            console.error('Error importing mapping:', err);
+            errors++;
+        }
+    }
+    
+    // Clear temp data
+    tempExtractedMappings = null;
+    currentMappingIndex = 0;
+    
+    // Reload mappings
+    await loadMappings();
+    
+    // Show result
+    let resultMsg = `Import complete!\n\nMappings imported: ${imported}`;
+    if (skipped > 0) resultMsg += `\nMappings skipped (already exist): ${skipped}`;
+    if (errors > 0) resultMsg += `\nErrors: ${errors}`;
+    alert(resultMsg);
+}
+
+// Helper function to check if two arrays have common elements
+function arraysHaveCommonElement(arr1, arr2) {
+    const set1 = new Set(arr1);
+    return arr2.some(item => set1.has(item));
 }
 
 // Extract mappings from timetable data
