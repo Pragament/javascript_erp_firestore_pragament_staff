@@ -507,6 +507,16 @@
             // Export timetable modal
             addListener('closeTimetableExportModal', 'click', closeTimetableExportModal);
             addListener('cancelTimetableExportBtn', 'click', closeTimetableExportModal);
+            
+            // Mapping issues modal
+            addListener('closeMappingIssuesModal', 'click', closeMappingIssuesModal);
+            addListener('closeMappingIssuesBtn', 'click', closeMappingIssuesModal);
+            
+            // Filter inputs for mapping issues
+            addListener('filterIssueClass', 'input', renderMappingIssuesTable);
+            addListener('filterIssueTeacher', 'input', renderMappingIssuesTable);
+            addListener('filterIssueSubject', 'input', renderMappingIssuesTable);
+            addListener('filterIssueType', 'change', renderMappingIssuesTable);
         }
         
         // Initialize the UI
@@ -2320,29 +2330,194 @@
             if (issues.length === 0) {
                 alert(`✅ All timetable entries match valid teacher-subject-class mappings!\n\nChecked against ${mappings.length} mapping(s) for ${selectedYear || 'current year'}.`);
             } else {
-                const missingMappings = issues.filter(i => i.type === 'missing_mapping').length;
-                const invalidClasses = issues.filter(i => i.type === 'invalid_class').length;
+                // Store issues and show modal
+                state.mappingIssues = issues;
+                state.mappingIssuesPage = 1;
+                state.mappingIssuesSort = { column: 'className', direction: 'asc' };
+                showMappingIssuesModal();
+            }
+        }
+        
+        // Show mapping issues modal
+        function showMappingIssuesModal() {
+            const issues = state.mappingIssues || [];
+            
+            // Update summary
+            const missingMappings = issues.filter(i => i.type === 'missing_mapping').length;
+            const invalidClasses = issues.filter(i => i.type === 'invalid_class').length;
+            
+            document.getElementById('mappingIssuesSummary').innerHTML = `
+                <strong>Found ${issues.length} mapping issue(s)</strong><br>
+                <span style="color: #856404;">
+                    ${missingMappings > 0 ? `• ${missingMappings} teacher(s) without valid mapping<br>` : ''}
+                    ${invalidClasses > 0 ? `• ${invalidClasses} class(es) where teacher is not authorized to teach the subject` : ''}
+                </span>
+            `;
+            
+            // Render table
+            renderMappingIssuesTable();
+            
+            // Show modal
+            document.getElementById('mappingIssuesModal').classList.add('active');
+        }
+        
+        // Close mapping issues modal
+        function closeMappingIssuesModal() {
+            document.getElementById('mappingIssuesModal').classList.remove('active');
+        }
+        
+        // Clear all filters
+        function clearMappingIssueFilters() {
+            document.getElementById('filterIssueClass').value = '';
+            document.getElementById('filterIssueTeacher').value = '';
+            document.getElementById('filterIssueSubject').value = '';
+            document.getElementById('filterIssueType').value = '';
+            renderMappingIssuesTable();
+        }
+        
+        // Filter and render mapping issues table
+        function renderMappingIssuesTable() {
+            let issues = state.mappingIssues || [];
+            
+            // Apply filters
+            const filterClass = document.getElementById('filterIssueClass').value.toLowerCase();
+            const filterTeacher = document.getElementById('filterIssueTeacher').value.toLowerCase();
+            const filterSubject = document.getElementById('filterIssueSubject').value.toLowerCase();
+            const filterType = document.getElementById('filterIssueType').value;
+            
+            issues = issues.filter(issue => {
+                if (filterClass && !issue.className.toLowerCase().includes(filterClass)) return false;
+                if (filterTeacher && !(issue.teacherName || issue.teacherId).toLowerCase().includes(filterTeacher)) return false;
+                if (filterSubject && !issue.subject.toLowerCase().includes(filterSubject)) return false;
+                if (filterType && issue.type !== filterType) return false;
+                return true;
+            });
+            
+            // Sort
+            const sort = state.mappingIssuesSort || { column: 'className', direction: 'asc' };
+            issues.sort((a, b) => {
+                let valA = a[sort.column] || '';
+                let valB = b[sort.column] || '';
+                valA = valA.toString().toLowerCase();
+                valB = valB.toString().toLowerCase();
                 
-                let message = `⚠️ Found ${issues.length} mapping issue(s):\n\n`;
-                if (missingMappings > 0) message += `- ${missingMappings} teacher(s) without valid mapping\n`;
-                if (invalidClasses > 0) message += `- ${invalidClasses} class(es) where teacher is not authorized to teach the subject\n`;
-                message += `\nSample issues:\n`;
-                
-                // Show first 5 issues
-                issues.slice(0, 5).forEach((issue, idx) => {
-                    message += `${idx + 1}. ${issue.className} - ${issue.day} ${issue.period}: ${issue.message}\n`;
-                });
-                
-                if (issues.length > 5) {
-                    message += `\n... and ${issues.length - 5} more issues.`;
-                }
-                
-                message += `\n\nGo to Management > Teacher-Subject-Class Mappings to fix these issues.`;
-                alert(message);
+                if (valA < valB) return sort.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            // Store filtered issues for pagination
+            state.filteredMappingIssues = issues;
+            
+            // Pagination
+            const pageSize = 20;
+            const page = state.mappingIssuesPage || 1;
+            const totalPages = Math.ceil(issues.length / pageSize) || 1;
+            const start = (page - 1) * pageSize;
+            const end = start + pageSize;
+            const pageIssues = issues.slice(start, end);
+            
+            // Update pagination controls
+            document.getElementById('mappingIssuesPaginationInfo').textContent = 
+                `Showing ${Math.min(start + 1, issues.length)}-${Math.min(end, issues.length)} of ${issues.length} issues`;
+            document.getElementById('mappingIssuesPageInfo').textContent = `Page ${page} of ${totalPages}`;
+            document.getElementById('prevMappingIssuesPage').disabled = page <= 1;
+            document.getElementById('nextMappingIssuesPage').disabled = page >= totalPages;
+            
+            // Render table body
+            const tbody = document.getElementById('mappingIssuesTableBody');
+            if (pageIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #6c757d;">No issues match the filters</td></tr>';
+                return;
             }
             
-            // Store issues for potential export
-            state.mappingIssues = issues;
+            tbody.innerHTML = pageIssues.map(issue => {
+                const typeLabel = issue.type === 'missing_mapping' 
+                    ? '<span style="color: #dc3545; font-weight: 600;">Missing Mapping</span>'
+                    : '<span style="color: #fd7e14; font-weight: 600;">Invalid Class</span>';
+                
+                return `
+                    <tr style="border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 8px;">${issue.className}</td>
+                        <td style="padding: 8px;">${issue.day}</td>
+                        <td style="padding: 8px;">${issue.period}</td>
+                        <td style="padding: 8px;">${issue.teacherName || issue.teacherId}</td>
+                        <td style="padding: 8px;">${issue.subject}</td>
+                        <td style="padding: 8px;">${typeLabel}</td>
+                        <td style="padding: 8px; max-width: 300px;">${issue.message}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Sort mapping issues
+        function sortMappingIssues(column) {
+            const currentSort = state.mappingIssuesSort || { column: 'className', direction: 'asc' };
+            
+            if (currentSort.column === column) {
+                // Toggle direction
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, default to asc
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+            
+            state.mappingIssuesSort = currentSort;
+            renderMappingIssuesTable();
+        }
+        
+        // Change page
+        function changeMappingIssuesPage(delta) {
+            const issues = state.filteredMappingIssues || state.mappingIssues || [];
+            const pageSize = 20;
+            const totalPages = Math.ceil(issues.length / pageSize) || 1;
+            const currentPage = state.mappingIssuesPage || 1;
+            const newPage = currentPage + delta;
+            
+            if (newPage >= 1 && newPage <= totalPages) {
+                state.mappingIssuesPage = newPage;
+                renderMappingIssuesTable();
+            }
+        }
+        
+        // Export mapping issues to CSV
+        function exportMappingIssuesCSV() {
+            let issues = state.filteredMappingIssues || state.mappingIssues || [];
+            
+            if (issues.length === 0) {
+                alert('No issues to export');
+                return;
+            }
+            
+            const headers = ['Class', 'Day', 'Period', 'Teacher ID', 'Teacher Name', 'Subject', 'Issue Type', 'Message'];
+            const rows = issues.map(issue => [
+                issue.className,
+                issue.day,
+                issue.period,
+                issue.teacherId,
+                issue.teacherName || '',
+                issue.subject,
+                issue.type === 'missing_mapping' ? 'Missing Mapping' : 'Invalid Class',
+                issue.message
+            ]);
+            
+            // Create CSV
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+            
+            // Download
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mapping_issues.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
         
         // Helper function to find class section by name
