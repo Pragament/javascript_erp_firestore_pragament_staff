@@ -502,6 +502,10 @@
             addListener('closeCopyYearModal', 'click', closeCopyYearModal);
             addListener('cancelCopyYearBtn', 'click', closeCopyYearModal);
             addListener('confirmCopyYearBtn', 'click', confirmCopyYear);
+            
+            // Export timetable modal
+            addListener('closeTimetableExportModal', 'click', closeTimetableExportModal);
+            addListener('cancelTimetableExportBtn', 'click', closeTimetableExportModal);
         }
         
         // Initialize the UI
@@ -2214,44 +2218,116 @@
             }
         }
         
-        // Export timetable
+        // Export timetable - show column selection modal
         function exportTimetable() {
             if (!state.timetableData) {
                 alert("No timetable data to export.");
                 return;
             }
             
-            // Ask for export format
-            const format = prompt("Export as Excel or CSV? (Enter 'excel' or 'csv')", "excel");
+            // Get number of periods from first class
+            const firstClass = Object.keys(state.timetableData)[0];
+            if (!firstClass) {
+                alert("No timetable data available.");
+                return;
+            }
+            const numPeriods = state.timetableData[firstClass].days[0].periods.length;
             
-            if (!format || (format !== 'excel' && format !== 'csv')) {
-                alert("Invalid format selected.");
+            // Populate column checkboxes
+            const container = document.getElementById('timetableColumnList');
+            let checkboxes = `
+                <div class="form-check mb-2">
+                    <input class="form-check-input timetable-col-check" type="checkbox" id="col_class" value="class" checked disabled>
+                    <label class="form-check-label" for="col_class">Class-Section (required)</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input timetable-col-check" type="checkbox" id="col_day" value="day" checked disabled>
+                    <label class="form-check-label" for="col_day">Day (required)</label>
+                </div>
+                <hr class="my-2">
+                <p class="text-muted small mb-2">Select periods to include:</p>
+            `;
+            
+            for (let i = 1; i <= numPeriods; i++) {
+                checkboxes += `
+                    <div class="form-check mb-2">
+                        <input class="form-check-input timetable-col-check" type="checkbox" id="col_p${i}" value="P${i}" checked>
+                        <label class="form-check-label" for="col_p${i}">Period ${i} (P${i})</label>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = checkboxes;
+            
+            // Hide error message
+            document.getElementById('timetableExportError').style.display = 'none';
+            
+            // Show modal
+            document.getElementById('timetableExportModal').classList.add('active');
+        }
+        
+        // Select or deselect all period columns
+        function selectAllTimetableColumns(select) {
+            document.querySelectorAll('.timetable-col-check:not([disabled])').forEach(cb => {
+                cb.checked = select;
+            });
+        }
+        
+        // Confirm and execute timetable export
+        function confirmTimetableExport() {
+            // Get selected periods (excluding required class and day columns)
+            const selectedPeriods = Array.from(document.querySelectorAll('.timetable-col-check:checked:not([disabled])'))
+                .map(cb => cb.value);
+            
+            // Validate at least one period is selected
+            if (selectedPeriods.length === 0) {
+                document.getElementById('timetableExportError').style.display = 'block';
                 return;
             }
             
+            // Hide error
+            document.getElementById('timetableExportError').style.display = 'none';
+            
+            // Get format
+            const format = document.getElementById('timetableExportFormat').value;
+            
+            // Close modal
+            closeTimetableExportModal();
+            
+            // Export based on format
             if (format === 'excel') {
-                exportToExcel();
+                exportToExcel(selectedPeriods);
             } else {
-                exportToCSV();
+                exportToCSV(selectedPeriods);
             }
         }
         
+        // Close timetable export modal
+        function closeTimetableExportModal() {
+            document.getElementById('timetableExportModal').classList.remove('active');
+        }
+        
         // Export to Excel
-        function exportToExcel() {
+        function exportToExcel(selectedPeriods = null) {
             // Create a new workbook
             const wb = XLSX.utils.book_new();
+            
+            // Determine which periods to export
+            const firstClass = Object.keys(state.timetableData)[0];
+            const totalPeriods = state.timetableData[firstClass].days[0].periods.length;
+            const periodsToExport = selectedPeriods || Array.from({length: totalPeriods}, (_, i) => `P${i+1}`);
+            const periodIndices = periodsToExport.map(p => parseInt(p.replace('P', '')) - 1);
             
             // Add each class as a sheet
             Object.keys(state.timetableData).forEach(className => {
                 const classData = state.timetableData[className];
                 
-                // Create header row
+                // Create header row with only selected periods
                 const header = ['Day'];
-                const numPeriods = classData.days[0].periods.length;
-                
-                for (let i = 1; i <= numPeriods; i++) {
-                    header.push(`P${i} Subject`, `P${i} Teacher Name`, `P${i} Teacher ID`, `P${i} Time`, `P${i} Type`);
-                }
+                periodIndices.forEach(idx => {
+                    const periodNum = idx + 1;
+                    header.push(`P${periodNum} Subject`, `P${periodNum} Teacher Name`, `P${periodNum} Teacher ID`, `P${periodNum} Time`, `P${periodNum} Type`);
+                });
                 
                 const data = [header];
                 
@@ -2264,7 +2340,9 @@
                     
                     const row = [dayName];
                     
-                    dayData.periods.forEach(period => {
+                    // Only add selected periods
+                    periodIndices.forEach(idx => {
+                        const period = dayData.periods[idx] || {};
                         row.push(period.subject || '');
                         row.push(period.teacherName || '');
                         row.push(period.teacherId || '');
@@ -2285,19 +2363,21 @@
         }
         
         // Export to CSV (new format)
-        function exportToCSV() {
-            let csv = 'Class-Section,Day';
-            
-            // Get number of periods from first class
+        function exportToCSV(selectedPeriods = null) {
+            // Determine which periods to export
             const firstClass = Object.keys(state.timetableData)[0];
             if (!firstClass) return;
             
-            const numPeriods = state.timetableData[firstClass].days[0].periods.length;
+            const totalPeriods = state.timetableData[firstClass].days[0].periods.length;
+            const periodsToExport = selectedPeriods || Array.from({length: totalPeriods}, (_, i) => `P${i+1}`);
+            const periodIndices = periodsToExport.map(p => parseInt(p.replace('P', '')) - 1);
             
-            // Add period headers
-            for (let i = 1; i <= numPeriods; i++) {
-                csv += `,P${i}`;
-            }
+            let csv = 'Class-Section,Day';
+            
+            // Add selected period headers only
+            periodsToExport.forEach(p => {
+                csv += `,${p}`;
+            });
             csv += '\n';
             
             // Add data for each class
@@ -2312,7 +2392,9 @@
                     
                     csv += `${className},${dayName}`;
                     
-                    dayData.periods.forEach(period => {
+                    // Only add selected periods
+                    periodIndices.forEach(idx => {
+                        const period = dayData.periods[idx] || {};
                         if (period.subject || period.teacherName || period.teacherId) {
                             csv += `,${period.teacherId || ''}:${period.teacherName}:${period.subject}`;
                         } else {
