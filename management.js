@@ -73,6 +73,67 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
 });
 
+// Clear local storage and reload page
+function clearLocalStorage() {
+    const confirmed = confirm(
+        'Are you sure you want to clear all local storage data?\n\n' +
+        'This will remove:\n' +
+        '• Selected school\n' +
+        '• Selected academic year\n' +
+        '• Cached timetable data\n' +
+        '• UI preferences\n\n' +
+        'This action cannot be undone. The page will reload after clearing.'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+        // Clear all app-related localStorage keys
+        const keysToClear = [
+            'selectedSchool',
+            'selectedAcademicYear',
+            'schoolTimetable',
+            'timetableAcademicYear',
+            'lastUploadedFilename',
+            'teacherFilters',
+            'subjectFilters',
+            'classSectionFilters',
+            'mappingFilters'
+        ];
+        
+        let clearedCount = 0;
+        keysToClear.forEach(key => {
+            if (localStorage.getItem(key) !== null) {
+                localStorage.removeItem(key);
+                clearedCount++;
+            }
+        });
+        
+        // Also clear any other keys that start with our app prefixes
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && (
+                key.startsWith('school') || 
+                key.startsWith('timetable') || 
+                key.startsWith('teacher') || 
+                key.startsWith('subject') || 
+                key.startsWith('mapping') ||
+                key.startsWith('classSection')
+            )) {
+                localStorage.removeItem(key);
+                clearedCount++;
+            }
+        }
+        
+        alert(`Cleared ${clearedCount} cached items. The page will now reload.`);
+        window.location.reload();
+        
+    } catch (error) {
+        console.error('Error clearing local storage:', error);
+        alert('Error clearing local storage: ' + error.message);
+    }
+}
+
 async function initializePage() {
     // Load schools for navbar
     await loadSchoolsForNav();
