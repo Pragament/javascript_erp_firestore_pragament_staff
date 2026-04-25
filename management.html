@@ -715,6 +715,35 @@
         </div>
     </div>
 
+    <!-- Period Selection Modal for Import -->
+    <div class="modal fade" id="periodSelectionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Periods to Import</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Select which periods to include when importing mappings. Uncheck periods like revision, exam invigilation, or breaks that should not be part of regular teacher assignments.
+                    </p>
+                    <div id="periodSelectionList">
+                        <!-- Period checkboxes will be populated here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="me-auto">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllPeriods(true)">Select All</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="toggleAllPeriods(false)">Deselect All</button>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmPeriodSelection()">Import Selected Periods</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Transfer/Move Teacher Modal -->
     <div class="modal fade" id="transferModal" tabindex="-1">
         <div class="modal-dialog">

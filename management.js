@@ -27,9 +27,11 @@ let allSubjects = [];
 let allClassSections = [];
 let allMappings = [];
 let allHistory = [];
+let selectedPeriods = []; // Store selected periods for import
+let tempTimetableData = null; // Store timetable data during import
 
 // Bootstrap modals
-let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal;
+let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal, periodSelectionModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize modals
@@ -38,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
     classSectionModal = new bootstrap.Modal(document.getElementById('classSectionModal'));
     mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
     transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
+    periodSelectionModal = new bootstrap.Modal(document.getElementById('periodSelectionModal'));
 
     // Check auth state
     auth.onAuthStateChanged(async (user) => {
@@ -890,26 +893,144 @@ async function importMappingsFromTimetable() {
     }
     
     try {
-        // First ensure class sections are imported (needed for proper ID matching)
+        // First load timetable data
         const timetableData = await loadTimetableDataForImport();
         if (!timetableData) return;
         
+        // Store for later use after period selection
+        tempTimetableData = timetableData;
+        
+        // Extract unique periods from timetable
+        const periods = extractPeriodsFromTimetable(timetableData);
+        
+        if (periods.length === 0) {
+            alert('No periods found in timetable data.');
+            return;
+        }
+        
+        // Show period selection modal
+        showPeriodSelectionModal(periods);
+        
+    } catch (error) {
+        console.error('Error loading timetable for import:', error);
+        alert('Error loading timetable: ' + error.message);
+    }
+}
+
+// Extract unique periods from timetable with their time info
+function extractPeriodsFromTimetable(timetableData) {
+    const periodMap = new Map();
+    
+    for (const classData of Object.values(timetableData)) {
+        if (!classData || !classData.days) continue;
+        
+        classData.days.forEach(day => {
+            if (!day.periods) return;
+            
+            day.periods.forEach((period, index) => {
+                const periodNum = period.period || period.periodNumber || (index + 1);
+                const periodName = period.name || period.label || `P${periodNum}`;
+                const startTime = period.startTime || period.start || '';
+                const endTime = period.endTime || period.end || '';
+                const key = `${periodName}`;
+                
+                if (!periodMap.has(key)) {
+                    periodMap.set(key, {
+                        name: periodName,
+                        number: periodNum,
+                        startTime: startTime,
+                        endTime: endTime,
+                        selected: true // Default to selected
+                    });
+                }
+            });
+        });
+    }
+    
+    // Sort by period number
+    return Array.from(periodMap.values()).sort((a, b) => {
+        const numA = parseInt(a.number) || 0;
+        const numB = parseInt(b.number) || 0;
+        return numA - numB;
+    });
+}
+
+// Show period selection modal
+function showPeriodSelectionModal(periods) {
+    selectedPeriods = periods;
+    
+    const container = document.getElementById('periodSelectionList');
+    container.innerHTML = periods.map((p, index) => `
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="period_${index}" 
+                   value="${p.name}" ${p.selected ? 'checked' : ''} 
+                   onchange="updatePeriodSelection(${index}, this.checked)">
+            <label class="form-check-label d-flex justify-content-between w-100" for="period_${index}">
+                <span><strong>${p.name}</strong></span>
+                <span class="text-muted small">
+                    ${p.startTime && p.endTime ? `${p.startTime} - ${p.endTime}` : ''}
+                </span>
+            </label>
+        </div>
+    `).join('');
+    
+    periodSelectionModal.show();
+}
+
+// Update period selection
+function updatePeriodSelection(index, checked) {
+    if (selectedPeriods[index]) {
+        selectedPeriods[index].selected = checked;
+    }
+}
+
+// Toggle all periods
+function toggleAllPeriods(selectAll) {
+    selectedPeriods.forEach((p, index) => {
+        p.selected = selectAll;
+        const checkbox = document.getElementById(`period_${index}`);
+        if (checkbox) checkbox.checked = selectAll;
+    });
+}
+
+// Confirm period selection and proceed with import
+async function confirmPeriodSelection() {
+    periodSelectionModal.hide();
+    
+    const selectedPeriodNames = selectedPeriods
+        .filter(p => p.selected)
+        .map(p => p.name);
+    
+    if (selectedPeriodNames.length === 0) {
+        alert('Please select at least one period to import.');
+        return;
+    }
+    
+    // Proceed with import using selected periods
+    await proceedWithImport(selectedPeriodNames);
+}
+
+// Proceed with import after period selection
+async function proceedWithImport(selectedPeriodNames) {
+    if (!tempTimetableData) return;
+    
+    try {
+        const timetableData = tempTimetableData;
+        let importedClasses = 0;
+        
         // Auto-import class sections if missing
         const classNames = Object.keys(timetableData);
-        let importedClasses = 0;
         
         for (const className of classNames) {
             const parsed = parseClassName(className);
             if (!parsed.grade || !parsed.section) continue;
             
-            // Check if exists
             const exists = allClassSections.some(cs => 
                 cs.grade === parsed.grade && 
                 cs.section?.toUpperCase() === parsed.section.toUpperCase()
             );
             
             if (!exists) {
-                // Auto-create class section
                 const classData = {
                     grade: parsed.grade,
                     section: parsed.section.toUpperCase(),
@@ -936,11 +1057,10 @@ async function importMappingsFromTimetable() {
         // Reload class sections if we imported any
         if (importedClasses > 0) {
             await loadClassSections();
-            console.log(`Auto-imported ${importedClasses} class sections`);
         }
         
-        // Now extract mappings with proper class section IDs
-        const extractedMappings = extractMappingsFromTimetable(timetableData);
+        // Extract mappings with period filtering
+        const extractedMappings = extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNames);
         
         if (extractedMappings.length === 0) {
             alert('No teacher-subject mappings found in the timetable data.');
@@ -1057,6 +1177,95 @@ function extractMappingsFromTimetable(timetableData) {
             if (!day.periods) return;
             
             day.periods.forEach(period => {
+                if (!period.teacherId && !period.teacherName) return;
+                if (!period.subject) return;
+                
+                // Determine teacher email/name
+                let teacherEmail = period.teacherId || period.teacherEmail;
+                let teacherName = period.teacherName || period.teacherId;
+                
+                // Try to find matching teacher in our database
+                const teacher = allTeachers.find(t => 
+                    t.email === teacherEmail || 
+                    t.name === teacherName ||
+                    t.email?.toLowerCase() === (teacherEmail || '').toLowerCase()
+                );
+                
+                if (teacher) {
+                    teacherEmail = teacher.email;
+                    teacherName = teacher.name;
+                }
+                
+                // Try to find matching subject
+                const subject = allSubjects.find(s => 
+                    s.name?.toLowerCase() === period.subject?.toLowerCase() ||
+                    s.code?.toLowerCase() === period.subject?.toLowerCase()
+                );
+                
+                const subjectCode = subject ? subject.code : period.subject;
+                const subjectName = subject ? subject.name : period.subject;
+                
+                // Create unique key for this mapping
+                const key = `${teacherEmail}|${subjectCode}|${classSectionId}`;
+                
+                if (!mappingSet.has(key)) {
+                    mappingSet.add(key);
+                    mappings.push({
+                        teacherEmail: teacherEmail || teacherName,
+                        teacherName: teacherName,
+                        subjectCode: subjectCode,
+                        subjectName: subjectName,
+                        classSectionId: classSectionId,
+                        className: className
+                    });
+                }
+            });
+        });
+    }
+    
+    return mappings;
+}
+
+// Extract mappings from timetable with period filtering
+function extractMappingsFromTimetableWithPeriods(timetableData, selectedPeriodNames) {
+    const mappings = [];
+    const mappingSet = new Set(); // To avoid duplicates
+    
+    // Convert to Set for faster lookup
+    const selectedPeriodsSet = new Set(selectedPeriodNames);
+    
+    for (const [className, classData] of Object.entries(timetableData)) {
+        if (!classData || !classData.days) continue;
+        
+        // Find class section ID
+        let classSection = allClassSections.find(cs => 
+            `${cs.grade}-${cs.section}` === className || cs.fullName === className
+        );
+        
+        if (!classSection) {
+            const parsed = parseClassName(className);
+            if (parsed.grade && parsed.section) {
+                classSection = allClassSections.find(cs => 
+                    cs.grade === parsed.grade && 
+                    cs.section?.toUpperCase() === parsed.section.toUpperCase()
+                );
+            }
+        }
+        
+        const classSectionId = classSection ? classSection.id : null;
+        
+        // Process each day
+        classData.days.forEach(day => {
+            if (!day.periods) return;
+            
+            day.periods.forEach((period, index) => {
+                // Get period name to check if it should be included
+                const periodNum = period.period || period.periodNumber || (index + 1);
+                const periodName = period.name || period.label || `P${periodNum}`;
+                
+                // Skip if this period is not selected
+                if (!selectedPeriodsSet.has(periodName)) return;
+                
                 if (!period.teacherId && !period.teacherName) return;
                 if (!period.subject) return;
                 
