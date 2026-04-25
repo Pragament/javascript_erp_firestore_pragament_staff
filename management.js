@@ -2097,17 +2097,25 @@ function downloadMappingsCSV() {
     }
     
     const headers = ['Teacher Name', 'Teacher Email', 'Subject Code', 'Subject Name', 'Class Sections', 'Effective From', 'Effective To', 'Status', 'Notes'];
-    const rows = allMappings.map(m => [
-        m.teacherName || '',
-        m.teacherEmail || '',
-        m.subjectCode || '',
-        m.subjectName || '',
-        (m.classSections || []).join('; '),
-        m.effectiveFrom || '',
-        m.effectiveTo || '',
-        m.status || '',
-        (m.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
-    ]);
+    const rows = allMappings.map(m => {
+        // Convert class section IDs to human-readable names
+        const classSectionNames = (m.classSections || []).map(csId => {
+            const cs = allClassSections.find(s => s.id === csId);
+            return cs ? `Grade ${cs.grade}-${cs.section}` : csId;
+        }).join('; ');
+        
+        return [
+            m.teacherName || '',
+            m.teacherEmail || '',
+            m.subjectCode || '',
+            m.subjectName || '',
+            classSectionNames,
+            m.effectiveFrom || '',
+            m.effectiveTo || '',
+            m.status || '',
+            (m.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
+        ];
+    });
     
     downloadCSV('teacher_mappings', headers, rows);
 }
