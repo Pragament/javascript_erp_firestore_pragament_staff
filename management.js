@@ -32,8 +32,11 @@ let tempTimetableData = null; // Store timetable data during import
 let tempExtractedMappings = null; // Store extracted mappings for import
 let currentMappingIndex = 0; // Current mapping being reviewed
 
+// CSV download pending data
+let pendingCSVData = null; // Store data for CSV download after column selection
+
 // Bootstrap modals
-let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal, periodSelectionModal;
+let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal, periodSelectionModal, csvColumnModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize modals
@@ -43,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
     mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
     transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
     periodSelectionModal = new bootstrap.Modal(document.getElementById('periodSelectionModal'));
+    csvColumnModal = new bootstrap.Modal(document.getElementById('csvColumnModal'));
 
     // Check auth state
     auth.onAuthStateChanged(async (user) => {
@@ -2040,17 +2044,19 @@ function downloadTeachersCSV() {
         return;
     }
     
-    const headers = ['Name', 'Email', 'Phone', 'Status', 'Join Date', 'Notes'];
-    const rows = allTeachers.map(t => [
-        t.name || '',
-        t.email || '',
-        t.phone || '',
-        t.status || '',
-        t.joinDate || '',
-        (t.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
-    ]);
+    const columnDefs = [
+        { key: 'name', label: 'Name', selected: true },
+        { key: 'email', label: 'Email', selected: true },
+        { key: 'phone', label: 'Phone', selected: true },
+        { key: 'status', label: 'Status', selected: true },
+        { key: 'joinDate', label: 'Join Date', selected: true },
+        { key: 'notes', label: 'Notes', selected: false }
+    ];
     
-    downloadCSV('teachers', headers, rows);
+    showCSVColumnModal('Teachers', 'teachers', allTeachers, columnDefs, (item, col) => {
+        if (col === 'notes') return (item[col] || '').replace(/,/g, ';').replace(/\n/g, ' ');
+        return item[col] || '';
+    });
 }
 
 function downloadSubjectsCSV() {
@@ -2059,16 +2065,18 @@ function downloadSubjectsCSV() {
         return;
     }
     
-    const headers = ['Code', 'Name', 'Periods/Week', 'Status', 'Description'];
-    const rows = allSubjects.map(s => [
-        s.code || '',
-        s.name || '',
-        s.periodsPerWeek || '',
-        s.status || '',
-        (s.description || '').replace(/,/g, ';').replace(/\n/g, ' ')
-    ]);
+    const columnDefs = [
+        { key: 'code', label: 'Code', selected: true },
+        { key: 'name', label: 'Name', selected: true },
+        { key: 'periodsPerWeek', label: 'Periods/Week', selected: true },
+        { key: 'status', label: 'Status', selected: true },
+        { key: 'description', label: 'Description', selected: false }
+    ];
     
-    downloadCSV('subjects', headers, rows);
+    showCSVColumnModal('Subjects', 'subjects', allSubjects, columnDefs, (item, col) => {
+        if (col === 'description') return (item[col] || '').replace(/,/g, ';').replace(/\n/g, ' ');
+        return item[col] || '';
+    });
 }
 
 function downloadClassSectionsCSV() {
@@ -2077,17 +2085,16 @@ function downloadClassSectionsCSV() {
         return;
     }
     
-    const headers = ['Grade', 'Section', 'Class Teacher Email', 'Room Number', 'Student Count', 'Academic Year'];
-    const rows = allClassSections.map(cs => [
-        cs.grade || '',
-        cs.section || '',
-        cs.classTeacherEmail || '',
-        cs.roomNumber || '',
-        cs.studentCount || '',
-        cs.academicYear || ''
-    ]);
+    const columnDefs = [
+        { key: 'grade', label: 'Grade', selected: true },
+        { key: 'section', label: 'Section', selected: true },
+        { key: 'classTeacherEmail', label: 'Class Teacher Email', selected: true },
+        { key: 'roomNumber', label: 'Room Number', selected: true },
+        { key: 'studentCount', label: 'Student Count', selected: true },
+        { key: 'academicYear', label: 'Academic Year', selected: true }
+    ];
     
-    downloadCSV('class_sections', headers, rows);
+    showCSVColumnModal('Class Sections', 'class_sections', allClassSections, columnDefs, (item, col) => item[col] || '');
 }
 
 function downloadMappingsCSV() {
@@ -2096,28 +2103,30 @@ function downloadMappingsCSV() {
         return;
     }
     
-    const headers = ['Teacher Name', 'Teacher Email', 'Subject Code', 'Subject Name', 'Class Sections', 'Effective From', 'Effective To', 'Status', 'Notes'];
-    const rows = allMappings.map(m => {
-        // Convert class section IDs to human-readable names
-        const classSectionNames = (m.classSections || []).map(csId => {
-            const cs = allClassSections.find(s => s.id === csId);
-            return cs ? `Grade ${cs.grade}-${cs.section}` : csId;
-        }).join('; ');
-        
-        return [
-            m.teacherName || '',
-            m.teacherEmail || '',
-            m.subjectCode || '',
-            m.subjectName || '',
-            classSectionNames,
-            m.effectiveFrom || '',
-            m.effectiveTo || '',
-            m.status || '',
-            (m.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
-        ];
-    });
+    const columnDefs = [
+        { key: 'teacherName', label: 'Teacher Name', selected: true },
+        { key: 'teacherEmail', label: 'Teacher Email', selected: true },
+        { key: 'subjectCode', label: 'Subject Code', selected: true },
+        { key: 'subjectName', label: 'Subject Name', selected: true },
+        { key: 'classSections', label: 'Class Sections', selected: true, transform: (m) => {
+            return (m.classSections || []).map(csId => {
+                const cs = allClassSections.find(s => s.id === csId);
+                return cs ? `Grade ${cs.grade}-${cs.section}` : csId;
+            }).join('; ');
+        }},
+        { key: 'effectiveFrom', label: 'Effective From', selected: true },
+        { key: 'effectiveTo', label: 'Effective To', selected: false },
+        { key: 'status', label: 'Status', selected: true },
+        { key: 'notes', label: 'Notes', selected: false, transform: (m) => (m.notes || '').replace(/,/g, ';').replace(/\n/g, ' ') }
+    ];
     
-    downloadCSV('teacher_mappings', headers, rows);
+    showCSVColumnModal('Teacher Mappings', 'teacher_mappings', allMappings, columnDefs, (item, col) => {
+        const colDef = columnDefs.find(c => c.key === col);
+        if (colDef && colDef.transform) {
+            return colDef.transform(item);
+        }
+        return item[col] || '';
+    });
 }
 
 function downloadCSV(filename, headers, rows) {
@@ -2139,6 +2148,83 @@ function downloadCSV(filename, headers, rows) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// Show CSV column selection modal
+function showCSVColumnModal(title, filename, data, columnDefs, getValueFn) {
+    // Store pending CSV data
+    pendingCSVData = {
+        filename: filename,
+        data: data,
+        columnDefs: columnDefs,
+        getValue: getValueFn
+    };
+    
+    // Update modal title
+    document.getElementById('csvColumnModalTitle').textContent = `Select Columns - ${title}`;
+    
+    // Populate column checkboxes
+    const container = document.getElementById('csvColumnList');
+    container.innerHTML = columnDefs.map((col, index) => `
+        <div class="form-check mb-2">
+            <input class="form-check-input csv-column-check" type="checkbox" 
+                   id="csv_col_${index}" value="${col.key}" 
+                   ${col.selected ? 'checked' : ''}>
+            <label class="form-check-label" for="csv_col_${index}">
+                ${col.label}
+            </label>
+        </div>
+    `).join('');
+    
+    // Hide error message
+    document.getElementById('csvColumnError').classList.add('d-none');
+    
+    // Show modal
+    csvColumnModal.show();
+}
+
+// Select or deselect all columns
+function selectAllCSVColumns(select) {
+    document.querySelectorAll('.csv-column-check').forEach(cb => {
+        cb.checked = select;
+    });
+}
+
+// Confirm download after column selection
+function confirmCSVDownload() {
+    // Get selected columns
+    const selectedColumns = Array.from(document.querySelectorAll('.csv-column-check:checked'))
+        .map(cb => cb.value);
+    
+    // Validate at least one column is selected
+    if (selectedColumns.length === 0) {
+        document.getElementById('csvColumnError').classList.remove('d-none');
+        return;
+    }
+    
+    // Hide error
+    document.getElementById('csvColumnError').classList.add('d-none');
+    
+    // Build headers and rows based on selected columns
+    const headers = selectedColumns.map(col => {
+        const colDef = pendingCSVData.columnDefs.find(c => c.key === col);
+        return colDef ? colDef.label : col;
+    });
+    
+    const rows = pendingCSVData.data.map(item => {
+        return selectedColumns.map(col => {
+            return pendingCSVData.getValue(item, col);
+        });
+    });
+    
+    // Close modal
+    csvColumnModal.hide();
+    
+    // Download CSV
+    downloadCSV(pendingCSVData.filename, headers, rows);
+    
+    // Clear pending data
+    pendingCSVData = null;
 }
 
 // ============== HISTORY ==============
