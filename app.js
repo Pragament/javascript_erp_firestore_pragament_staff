@@ -96,7 +96,7 @@ async function initializeApp() {
     await loadAssignments();
 }
 
-// Load schools for navbar dropdown
+// Load schools for navbar dropdown (filtered to schools where user is staff)
 async function loadNavSchools() {
     try {
         const snapshot = await firestore.collection('schools').get();
@@ -104,10 +104,35 @@ async function loadNavSchools() {
         const yearSelect = elements.navYearSelect;
         
         let optionsHtml = '<option value="">Select School</option>';
-        snapshot.docs.forEach(doc => {
+        
+        // Filter schools where current user is a staff member
+        const userSchools = [];
+        for (const doc of snapshot.docs) {
+            const schoolId = doc.id;
             const schoolData = doc.data();
-            const schoolName = schoolData.schoolName || doc.id;
-            optionsHtml += `<option value="${doc.id}">${schoolName}</option>`;
+            
+            // Check if user is staff in this school
+            const staffSnapshot = await firestore.collection('schools')
+                .doc(schoolId)
+                .collection('staff')
+                .where('email', '==', currentUser.email.toLowerCase())
+                .where('status', '==', 'active')
+                .get();
+            
+            if (!staffSnapshot.empty) {
+                userSchools.push({
+                    id: schoolId,
+                    name: schoolData.schoolName || schoolId,
+                    role: staffSnapshot.docs[0].data().role || 'viewer'
+                });
+            }
+        }
+        
+        // Sort by school name
+        userSchools.sort((a, b) => a.name.localeCompare(b.name));
+        
+        userSchools.forEach(school => {
+            optionsHtml += `<option value="${school.id}">${school.name}</option>`;
         });
         
         schoolSelect.innerHTML = optionsHtml;

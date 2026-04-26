@@ -164,10 +164,36 @@ async function loadSchoolsForNav() {
         const snapshot = await firestore.collection('schools').get();
         const select = document.getElementById('nav-school-select');
         let html = '<option value="">Select School</option>';
-        snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            html += `<option value="${doc.id}">${data.schoolName || doc.id}</option>`;
+        
+        // Filter schools where current user is a staff member
+        const userSchools = [];
+        for (const doc of snapshot.docs) {
+            const schoolId = doc.id;
+            const schoolData = doc.data();
+            
+            // Check if user is staff in this school
+            const staffSnapshot = await firestore.collection('schools')
+                .doc(schoolId)
+                .collection('staff')
+                .where('email', '==', currentUser.email.toLowerCase())
+                .where('status', '==', 'active')
+                .get();
+            
+            if (!staffSnapshot.empty) {
+                userSchools.push({
+                    id: schoolId,
+                    name: schoolData.schoolName || schoolId
+                });
+            }
+        }
+        
+        // Sort by school name
+        userSchools.sort((a, b) => a.name.localeCompare(b.name));
+        
+        userSchools.forEach(school => {
+            html += `<option value="${school.id}">${school.name}</option>`;
         });
+        
         select.innerHTML = html;
     } catch (error) {
         console.error('Error loading schools:', error);
