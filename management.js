@@ -264,12 +264,13 @@ function renderTeachers() {
     
     const tbody = document.getElementById('teachersTable');
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No teachers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No teachers found</td></tr>';
         return;
     }
     
     tbody.innerHTML = filtered.map(t => `
         <tr>
+            <td><strong>${t.teacherCode || '-'}</strong></td>
             <td>
                 <div class="d-flex align-items-center">
                     <div class="teacher-avatar">${(t.name || 'T').charAt(0).toUpperCase()}</div>
@@ -309,6 +310,7 @@ function openTeacherModal(teacherId = null) {
         if (teacher) {
             document.getElementById('teacherModalTitle').textContent = 'Edit Teacher';
             document.getElementById('teacherId').value = teacher.id;
+            document.getElementById('teacherCode').value = teacher.teacherCode || '';
             document.getElementById('teacherName').value = teacher.name || '';
             document.getElementById('teacherEmail').value = teacher.email || '';
             document.getElementById('teacherPhone').value = teacher.phone || '';
@@ -334,13 +336,22 @@ async function saveTeacher() {
     }
     
     const id = document.getElementById('teacherId').value;
+    const teacherCode = document.getElementById('teacherCode').value.trim().toUpperCase();
+    const name = document.getElementById('teacherName').value.trim();
+    const email = document.getElementById('teacherEmail').value.trim();
+    const phone = document.getElementById('teacherPhone').value.trim();
+    const joinDate = document.getElementById('teacherJoinDate').value;
+    const status = document.getElementById('teacherStatus').value;
+    const notes = document.getElementById('teacherNotes').value.trim();
+    
     const data = {
-        name: document.getElementById('teacherName').value.trim(),
-        email: document.getElementById('teacherEmail').value.trim(),
-        phone: document.getElementById('teacherPhone').value.trim(),
-        joinDate: document.getElementById('teacherJoinDate').value,
-        status: document.getElementById('teacherStatus').value,
-        notes: document.getElementById('teacherNotes').value.trim(),
+        teacherCode: teacherCode || null,
+        name,
+        email: email.toLowerCase(),
+        phone,
+        joinDate,
+        status,
+        notes,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: currentUser.email
     };
@@ -1707,9 +1718,10 @@ async function importTeachersFromTimetable() {
         let skipped = 0;
         
         for (const teacher of teachers) {
-            // Check if teacher with this email already exists
+            // Check if teacher with this email OR teacherCode already exists
             const exists = allTeachers.some(t => 
-                t.email?.toLowerCase() === teacher.email?.toLowerCase()
+                t.email?.toLowerCase() === teacher.email?.toLowerCase() ||
+                (teacher.teacherCode && t.teacherCode?.toUpperCase() === teacher.teacherCode?.toUpperCase())
             );
             
             if (exists) {
@@ -1720,6 +1732,7 @@ async function importTeachersFromTimetable() {
             const teacherData = {
                 name: teacher.name,
                 email: teacher.email,
+                teacherCode: teacher.teacherCode,
                 status: 'active',
                 joinDate: new Date().toISOString().split('T')[0],
                 notes: `Imported from ${selectedYear} timetable`,
@@ -1749,7 +1762,7 @@ async function importTeachersFromTimetable() {
 
 // Extract teachers from timetable
 function extractTeachersFromTimetable(timetableData) {
-    const teacherSet = new Map(); // Use Map to store name->email pairs
+    const teacherSet = new Map(); // Use Map to store teacherCode->teacherData pairs
     
     for (const classData of Object.values(timetableData)) {
         if (!classData || !classData.days) continue;
@@ -1760,11 +1773,44 @@ function extractTeachersFromTimetable(timetableData) {
             day.periods.forEach(period => {
                 if (!period.teacherId && !period.teacherName) return;
                 
-                const name = period.teacherName || period.teacherId;
-                const email = period.teacherEmail || period.teacherId;
+                // Parse teacherId which can be: "T001", "T001:Name:Subject", or just a name
+                let teacherCode = null;
+                let name = period.teacherName;
                 
-                if (name && !teacherSet.has(email)) {
-                    teacherSet.set(email, { name, email });
+                if (period.teacherId) {
+                    // Check if teacherId follows format "T001:Name:Subject" or just "T001"
+                    const parts = period.teacherId.split(':');
+                    if (parts.length >= 1) {
+                        const firstPart = parts[0].trim();
+                        // Check if it looks like a teacher code (T followed by numbers)
+                        if (/^T\d+$/i.test(firstPart)) {
+                            teacherCode = firstPart.toUpperCase();
+                            // Extract name from second part if available and no explicit teacherName
+                            if (!name && parts.length >= 2) {
+                                name = parts[1].trim();
+                            }
+                        }
+                    }
+                    
+                    // If no code pattern found, use teacherId as name if no name provided
+                    if (!name && !teacherCode) {
+                        name = period.teacherId;
+                    }
+                }
+                
+                // Generate email from name if not provided
+                let email = period.teacherEmail;
+                if (!email && name) {
+                    // Create email from name: lowercase, replace spaces with dots
+                    const emailLocal = name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+                    email = `${emailLocal}@school.com`;
+                }
+                
+                // Use teacherCode or email as unique key
+                const key = teacherCode || email;
+                
+                if (key && name && !teacherSet.has(key)) {
+                    teacherSet.set(key, { name, email, teacherCode });
                 }
             });
         });

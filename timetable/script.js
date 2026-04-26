@@ -2267,20 +2267,42 @@
             
             // Build teacher lookup: teacherId or name -> teacherEmail
             const teacherLookup = new Map();
+            const normalizeName = (name) => name?.toLowerCase().replace(/\s+/g, ' ').trim();
+            
+            console.log(`[CheckMappings] Building lookup from ${teachers.length} teachers`);
+            
             teachers.forEach(t => {
                 if (t.email) {
+                    const email = t.email.toLowerCase();
                     // Map by email itself
-                    teacherLookup.set(t.email.toLowerCase(), t.email.toLowerCase());
+                    teacherLookup.set(email, email);
                     // Map by teacher code (e.g., T001)
                     if (t.teacherCode) {
-                        teacherLookup.set(t.teacherCode.toLowerCase(), t.email.toLowerCase());
+                        teacherLookup.set(t.teacherCode.toLowerCase(), email);
                     }
-                    // Map by name
+                    // Map by name (original and normalized)
                     if (t.name) {
-                        teacherLookup.set(t.name.toLowerCase(), t.email.toLowerCase());
+                        const nameOriginal = t.name.toLowerCase();
+                        const nameNormalized = normalizeName(t.name);
+                        const nameNoSpaces = t.name.toLowerCase().replace(/\s+/g, '');
+                        
+                        teacherLookup.set(nameOriginal, email);
+                        if (nameNormalized !== nameOriginal) {
+                            teacherLookup.set(nameNormalized, email);
+                        }
+                        if (nameNoSpaces !== nameOriginal && nameNoSpaces !== nameNormalized) {
+                            teacherLookup.set(nameNoSpaces, email);
+                        }
+                        
+                        // Log for debugging
+                        if (t.name.toLowerCase().includes('sai')) {
+                            console.log(`[CheckMappings] Teacher lookup: "${t.name}" -> "${email}" (variations: "${nameOriginal}", "${nameNormalized}", "${nameNoSpaces}")`);
+                        }
                     }
                 }
             });
+            
+            console.log(`[CheckMappings] Teacher lookup size: ${teacherLookup.size} entries`);
             
             // Build a lookup for valid mappings: teacherEmail+subject -> classSections[]
             const validMappings = new Map();
@@ -2319,13 +2341,33 @@
                         const teacherIdOrName = period.teacherId.toLowerCase();
                         const teacherName = (period.teacherName || '').toLowerCase();
                         
-                        // Try to find teacher email from lookup
+                        // Normalize lookup keys (handle extra spaces)
+                        const normalizedId = normalizeName(period.teacherId);
+                        const normalizedName = normalizeName(period.teacherName || '');
+                        const noSpacesId = period.teacherId.toLowerCase().replace(/\s+/g, '');
+                        const noSpacesName = (period.teacherName || '').toLowerCase().replace(/\s+/g, '');
+                        
+                        // Try to find teacher email from lookup (multiple variations)
                         let teacherEmail = teacherLookup.get(teacherIdOrName) || 
+                                          teacherLookup.get(normalizedId) ||
+                                          teacherLookup.get(noSpacesId) ||
                                           teacherLookup.get(teacherName) ||
+                                          teacherLookup.get(normalizedName) ||
+                                          teacherLookup.get(noSpacesName) ||
                                           teacherIdOrName; // fallback to ID if no match
                         
                         const subjectCode = period.subject.toLowerCase();
                         const key = `${teacherEmail}|${subjectCode}`;
+                        
+                        // Debug logging for Sai Priya or any unmatched teacher
+                        if (period.teacherId?.toLowerCase().includes('sai') || 
+                            period.teacherName?.toLowerCase().includes('sai')) {
+                            console.log(`[CheckMappings] Checking: class=${className}, teacherId="${period.teacherId}", teacherName="${period.teacherName}"`);
+                            console.log(`[CheckMappings]   Variations tried: id="${teacherIdOrName}", normId="${normalizedId}", noSpaceId="${noSpacesId}"`);
+                            console.log(`[CheckMappings]   Found teacherEmail: "${teacherEmail}"`);
+                            console.log(`[CheckMappings]   Subject: "${subjectCode}", Key: "${key}"`);
+                            console.log(`[CheckMappings]   Valid mapping exists: ${validMappings.has(key)}`);
+                        }
                         
                         // Check if this teacher-subject mapping exists
                         if (!validMappings.has(key)) {

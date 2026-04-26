@@ -302,6 +302,7 @@
                             <table class="table table-hover">
                                 <thead>
                                     <tr>
+                                        <th>Code</th>
                                         <th>Teacher</th>
                                         <th>Email</th>
                                         <th>Phone</th>
@@ -311,7 +312,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="teachersTable">
-                                    <tr><td colspan="6" class="text-center text-muted">Select school and year to view teachers</td></tr>
+                                    <tr><td colspan="7" class="text-center text-muted">Select school and year to view teachers</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -527,6 +528,10 @@
                 <div class="modal-body">
                     <form id="teacherForm">
                         <input type="hidden" id="teacherId">
+                        <div class="mb-3">
+                            <label class="form-label">Teacher Code (e.g., T001)</label>
+                            <input type="text" class="form-control" id="teacherCode" placeholder="T001">
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Full Name *</label>
                             <input type="text" class="form-control" id="teacherName" required>
