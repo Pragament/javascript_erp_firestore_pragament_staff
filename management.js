@@ -237,7 +237,7 @@ function hideLoading() {
 }
 
 function clearAllTables() {
-    document.getElementById('teachersTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view teachers</td></tr>';
+    document.getElementById('teachersTable').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select school and year to view teachers</td></tr>';
     document.getElementById('subjectsTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view subjects</td></tr>';
     document.getElementById('classSectionsTable').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Select school and year to view class sections</td></tr>';
     document.getElementById('mappingsGrid').innerHTML = `
@@ -290,12 +290,13 @@ function renderTeachers() {
     
     const tbody = document.getElementById('teachersTable');
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No teachers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No teachers found</td></tr>';
         return;
     }
     
     tbody.innerHTML = filtered.map(t => `
         <tr>
+            <td><small class="text-muted" title="${t.id}">${t.id.substring(0, 8)}...</small></td>
             <td><strong>${t.teacherCode || '-'}</strong></td>
             <td>
                 <div class="d-flex align-items-center">
