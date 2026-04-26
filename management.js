@@ -2516,3 +2516,449 @@ if (passedYear) {
     localStorage.setItem('selectedAcademicYear', passedYear);
     selectedYear = passedYear;
 }
+
+// ============== SCHOOL STAFF MANAGEMENT ==============
+
+let schoolStaff = [];
+let customRoles = [];
+let customRoleModal = null;
+let editStaffModal = null;
+
+// Initialize staff management when DOM loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap modals
+    const customRoleModalEl = document.getElementById('customRoleModal');
+    const editStaffModalEl = document.getElementById('editStaffModal');
+    
+    if (customRoleModalEl) {
+        customRoleModal = new bootstrap.Modal(customRoleModalEl);
+    }
+    if (editStaffModalEl) {
+        editStaffModal = new bootstrap.Modal(editStaffModalEl);
+    }
+    
+    // Event listener for invite button
+    const inviteBtn = document.getElementById('inviteStaffBtn');
+    if (inviteBtn) {
+        inviteBtn.addEventListener('click', inviteStaff);
+    }
+    
+    // Load school staff when tab is shown
+    const schoolStaffTab = document.querySelector('a[href="#schoolstaff"]');
+    if (schoolStaffTab) {
+        schoolStaffTab.addEventListener('shown.bs.tab', function() {
+            loadSchoolStaff();
+            loadCustomRoles();
+        });
+    }
+});
+
+// Load school staff from Firestore
+async function loadSchoolStaff() {
+    if (!selectedSchool) {
+        document.getElementById('schoolStaffTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Select school to view staff</td></tr>';
+        return;
+    }
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('staff')
+            .orderBy('invitedAt', 'desc')
+            .get();
+        
+        schoolStaff = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderSchoolStaff();
+    } catch (error) {
+        console.error('Error loading school staff:', error);
+        document.getElementById('schoolStaffTable').innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error loading staff</td></tr>';
+    }
+}
+
+// Render school staff table
+function renderSchoolStaff() {
+    const tbody = document.getElementById('schoolStaffTable');
+    
+    if (schoolStaff.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No staff invited yet</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = schoolStaff.map(staff => {
+        const roleBadge = getRoleBadge(staff.role, staff.customRoleName);
+        const statusBadge = staff.status === 'active' 
+            ? '<span class="badge bg-success">Active</span>'
+            : '<span class="badge bg-secondary">Inactive</span>';
+        
+        return `
+            <tr>
+                <td>${staff.email}</td>
+                <td>${roleBadge}</td>
+                <td>${statusBadge}</td>
+                <td>${staff.invitedBy || '-'}</td>
+                <td>${staff.invitedAt ? formatDate(staff.invitedAt.toDate()) : '-'}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editStaffRole('${staff.id}')" title="Edit Role">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeStaff('${staff.id}')" title="Remove">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Get role badge HTML
+function getRoleBadge(role, customRoleName) {
+    if (customRoleName) {
+        return `<span class="badge" style="background-color: #6c757d;">${customRoleName}</span>`;
+    }
+    
+    const badgeClasses = {
+        'admin': 'bg-danger',
+        'editor': 'bg-warning text-dark',
+        'viewer': 'bg-info'
+    };
+    
+    const roleLabels = {
+        'admin': 'Admin',
+        'editor': 'Editor',
+        'viewer': 'Viewer'
+    };
+    
+    return `<span class="badge ${badgeClasses[role] || 'bg-secondary'}">${roleLabels[role] || role}</span>`;
+}
+
+// Invite staff to school
+async function inviteStaff() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+    
+    const email = document.getElementById('inviteStaffEmail').value.trim();
+    const role = document.getElementById('inviteStaffRole').value;
+    const customRoleId = document.getElementById('inviteCustomRole').value;
+    
+    if (!email || !email.includes('@')) {
+        alert('Please enter a valid email address');
+        return;
+    }
+    
+    // Check if staff already exists
+    const exists = schoolStaff.some(s => s.email.toLowerCase() === email.toLowerCase());
+    if (exists) {
+        alert('This email is already invited to the school');
+        return;
+    }
+    
+    try {
+        const staffData = {
+            email: email.toLowerCase(),
+            role: customRoleId ? null : role,
+            customRoleId: customRoleId || null,
+            customRoleName: customRoleId ? getCustomRoleName(customRoleId) : null,
+            status: 'active',
+            invitedBy: currentUser.email,
+            invitedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('staff')
+            .add(staffData);
+        
+        // Clear form
+        document.getElementById('inviteStaffEmail').value = '';
+        document.getElementById('inviteStaffRole').value = 'viewer';
+        document.getElementById('inviteCustomRole').value = '';
+        
+        alert('Invitation sent successfully!');
+        await loadSchoolStaff();
+    } catch (error) {
+        console.error('Error inviting staff:', error);
+        alert('Failed to send invitation: ' + error.message);
+    }
+}
+
+// Get custom role name by ID
+function getCustomRoleName(roleId) {
+    const role = customRoles.find(r => r.id === roleId);
+    return role ? role.name : null;
+}
+
+// Edit staff role
+function editStaffRole(staffId) {
+    const staff = schoolStaff.find(s => s.id === staffId);
+    if (!staff) return;
+    
+    document.getElementById('editStaffId').value = staffId;
+    document.getElementById('editStaffEmail').value = staff.email;
+    document.getElementById('editStaffCurrentRole').value = staff.customRoleName || staff.role || 'viewer';
+    document.getElementById('editStaffNewRole').value = staff.role || 'viewer';
+    
+    // Populate custom roles dropdown
+    populateEditStaffCustomRoles(staff.customRoleId);
+    
+    editStaffModal.show();
+}
+
+// Populate custom roles dropdown for edit staff modal
+function populateEditStaffCustomRoles(selectedRoleId) {
+    const select = document.getElementById('editStaffCustomRole');
+    let html = '<option value="">-- No Custom Role --</option>';
+    
+    customRoles.forEach(role => {
+        const selected = role.id === selectedRoleId ? 'selected' : '';
+        html += `<option value="${role.id}" ${selected}>${role.name}</option>`;
+    });
+    
+    select.innerHTML = html;
+}
+
+// Save staff role change
+async function saveStaffRoleChange() {
+    const staffId = document.getElementById('editStaffId').value;
+    const newRole = document.getElementById('editStaffNewRole').value;
+    const customRoleId = document.getElementById('editStaffCustomRole').value;
+    
+    if (!staffId) return;
+    
+    try {
+        const updateData = {
+            role: customRoleId ? null : newRole,
+            customRoleId: customRoleId || null,
+            customRoleName: customRoleId ? getCustomRoleName(customRoleId) : null,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: currentUser.email
+        };
+        
+        await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('staff')
+            .doc(staffId)
+            .update(updateData);
+        
+        editStaffModal.hide();
+        alert('Role updated successfully!');
+        await loadSchoolStaff();
+    } catch (error) {
+        console.error('Error updating staff role:', error);
+        alert('Failed to update role: ' + error.message);
+    }
+}
+
+// Remove staff from school
+async function removeStaff(staffId) {
+    if (!confirm('Are you sure you want to remove this staff member?')) {
+        return;
+    }
+    
+    try {
+        await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('staff')
+            .doc(staffId)
+            .delete();
+        
+        alert('Staff member removed successfully!');
+        await loadSchoolStaff();
+    } catch (error) {
+        console.error('Error removing staff:', error);
+        alert('Failed to remove staff: ' + error.message);
+    }
+}
+
+// ============== CUSTOM ROLES MANAGEMENT ==============
+
+// Load custom roles from Firestore
+async function loadCustomRoles() {
+    if (!selectedSchool) {
+        document.getElementById('customRolesTable').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Select school to view roles</td></tr>';
+        return;
+    }
+    
+    try {
+        const snapshot = await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('customRoles')
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        customRoles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Count users per role
+        customRoles.forEach(role => {
+            role.userCount = schoolStaff.filter(s => s.customRoleId === role.id).length;
+        });
+        
+        renderCustomRoles();
+        populateInviteCustomRoles();
+    } catch (error) {
+        console.error('Error loading custom roles:', error);
+        document.getElementById('customRolesTable').innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error loading roles</td></tr>';
+    }
+}
+
+// Render custom roles table
+function renderCustomRoles() {
+    const tbody = document.getElementById('customRolesTable');
+    
+    if (customRoles.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No custom roles created yet. Click "Create Role" to add one.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = customRoles.map(role => {
+        const permCount = role.permissions ? role.permissions.length : 0;
+        return `
+            <tr>
+                <td><strong>${role.name}</strong></td>
+                <td>${role.description || '-'}</td>
+                <td><span class="badge bg-primary">${permCount} permissions</span></td>
+                <td>${role.userCount || 0} users</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editCustomRole('${role.id}')" title="Edit">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteCustomRole('${role.id}')" title="Delete">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Populate custom roles dropdown in invite form
+function populateInviteCustomRoles() {
+    const select = document.getElementById('inviteCustomRole');
+    let html = '<option value="">-- Use Standard Role --</option>';
+    
+    customRoles.forEach(role => {
+        html += `<option value="${role.id}">${role.name}</option>`;
+    });
+    
+    select.innerHTML = html;
+}
+
+// Open custom role modal (create or edit)
+function openRoleModal(roleId = null) {
+    document.getElementById('customRoleForm').reset();
+    document.getElementById('customRoleId').value = '';
+    
+    if (roleId) {
+        const role = customRoles.find(r => r.id === roleId);
+        if (role) {
+            document.getElementById('customRoleModalTitle').textContent = 'Edit Custom Role';
+            document.getElementById('customRoleId').value = role.id;
+            document.getElementById('customRoleName').value = role.name;
+            document.getElementById('customRoleDescription').value = role.description || '';
+            
+            // Check permission checkboxes
+            if (role.permissions) {
+                role.permissions.forEach(perm => {
+                    const checkbox = document.querySelector(`input[value="${perm}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+        }
+    } else {
+        document.getElementById('customRoleModalTitle').textContent = 'Create Custom Role';
+    }
+    
+    customRoleModal.show();
+}
+
+// Edit custom role
+function editCustomRole(roleId) {
+    openRoleModal(roleId);
+}
+
+// Save custom role (create or update)
+async function saveCustomRole() {
+    const roleId = document.getElementById('customRoleId').value;
+    const name = document.getElementById('customRoleName').value.trim();
+    const description = document.getElementById('customRoleDescription').value.trim();
+    
+    if (!name) {
+        alert('Role name is required');
+        return;
+    }
+    
+    // Get selected permissions
+    const permissions = [];
+    document.querySelectorAll('#customRoleForm input[type="checkbox"]:checked').forEach(cb => {
+        permissions.push(cb.value);
+    });
+    
+    if (permissions.length === 0) {
+        alert('Please select at least one permission');
+        return;
+    }
+    
+    const roleData = {
+        name,
+        description,
+        permissions,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        if (roleId) {
+            // Update existing role
+            await firestore.collection('schools')
+                .doc(selectedSchool)
+                .collection('customRoles')
+                .doc(roleId)
+                .update(roleData);
+        } else {
+            // Create new role
+            roleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            roleData.createdBy = currentUser.email;
+            
+            await firestore.collection('schools')
+                .doc(selectedSchool)
+                .collection('customRoles')
+                .add(roleData);
+        }
+        
+        customRoleModal.hide();
+        alert(roleId ? 'Role updated successfully!' : 'Role created successfully!');
+        await loadCustomRoles();
+    } catch (error) {
+        console.error('Error saving custom role:', error);
+        alert('Failed to save role: ' + error.message);
+    }
+}
+
+// Delete custom role
+async function deleteCustomRole(roleId) {
+    // Check if role is in use
+    const usersWithRole = schoolStaff.filter(s => s.customRoleId === roleId);
+    if (usersWithRole.length > 0) {
+        alert(`Cannot delete this role. It is assigned to ${usersWithRole.length} staff member(s). Please reassign them first.`);
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this custom role?')) {
+        return;
+    }
+    
+    try {
+        await firestore.collection('schools')
+            .doc(selectedSchool)
+            .collection('customRoles')
+            .doc(roleId)
+            .delete();
+        
+        alert('Role deleted successfully!');
+        await loadCustomRoles();
+    } catch (error) {
+        console.error('Error deleting custom role:', error);
+        alert('Failed to delete role: ' + error.message);
+    }
+}
