@@ -240,7 +240,7 @@ function hideLoading() {
 function clearAllTables() {
     document.getElementById('teachersTable').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select school and year to view teachers</td></tr>';
     document.getElementById('subjectsTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view subjects</td></tr>';
-    document.getElementById('classSectionsTable').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Select school and year to view class sections</td></tr>';
+    document.getElementById('classSectionsTable').innerHTML = '<tr><td colspan="9" class="text-center text-muted">Select school and year to view class sections</td></tr>';
     document.getElementById('mappingsGrid').innerHTML = `
         <div class="col-12">
             <div class="empty-state">
@@ -586,8 +586,11 @@ function clearSubjectFilters() {
 
 async function loadClassSections() {
     if (!selectedSchool || !selectedYear) return;
-    
+
     try {
+        // Load school sections first (needed for rendering school section names)
+        await loadSchoolSections();
+
         const snapshot = await firestore.collection('schools')
             .doc(selectedSchool)
             .collection('classSections')
@@ -595,12 +598,12 @@ async function loadClassSections() {
             .orderBy('grade')
             .orderBy('section')
             .get();
-        
+
         allClassSections = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
+
         // Save to localStorage for timetable page access
         localStorage.setItem('classSections', JSON.stringify(allClassSections));
-        
+
         renderClassSections();
         updateMappingClassOptions();
     } catch (error) {
@@ -611,26 +614,33 @@ async function loadClassSections() {
 function renderClassSections() {
     const filterGrade = document.getElementById('filterClassGrade').value;
     const filterSection = document.getElementById('filterClassSection').value.toLowerCase();
-    
+
     let filtered = allClassSections.filter(cs => {
         if (filterGrade && cs.grade !== filterGrade) return false;
         if (filterSection && !cs.section?.toLowerCase().includes(filterSection)) return false;
         return true;
     });
-    
+
     const tbody = document.getElementById('classSectionsTable');
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No class sections found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No class sections found</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = filtered.map(cs => {
         const classTeacher = allTeachers.find(t => t.email === cs.classTeacherEmail);
+        // Find school section name from schoolSections array
+        const schoolSection = schoolSections.find(s => s.sectionId === cs.schoolSectionId);
+        const schoolSectionDisplay = schoolSection
+            ? `${schoolSection.sectionId} (${schoolSection.sectionName || '-'})`
+            : (cs.schoolSectionId || '-');
         return `
         <tr>
             <td><strong>${cs.grade || '-'}-${cs.section || '-'}</strong></td>
             <td>Grade ${cs.grade || '-'}</td>
             <td>${cs.section || '-'}</td>
+            <td><small class="text-muted" title="${cs.id}">${cs.id.substring(0, 8)}...</small></td>
+            <td>${schoolSectionDisplay}</td>
             <td>${classTeacher ? classTeacher.name : (cs.classTeacherEmail || '-')}</td>
             <td>${cs.roomNumber || '-'}</td>
             <td>${cs.studentCount || '-'}</td>
