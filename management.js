@@ -27,6 +27,7 @@ let allSubjects = [];
 let allClassSections = [];
 let allMappings = [];
 let allHistory = [];
+let schoolSections = []; // School-level sections from /schools/{schoolId}.sections
 let selectedPeriods = []; // Store selected periods for import
 let tempTimetableData = null; // Store timetable data during import
 let tempExtractedMappings = null; // Store extracted mappings for import
@@ -645,11 +646,43 @@ function renderClassSections() {
     `}).join('');
 }
 
-function openClassSectionModal(classSectionId = null) {
+async function loadSchoolSections() {
+    if (!selectedSchool) return;
+    
+    try {
+        const schoolDoc = await firestore.collection('schools').doc(selectedSchool).get();
+        if (schoolDoc.exists) {
+            const schoolData = schoolDoc.data();
+            schoolSections = schoolData.sections || [];
+        } else {
+            schoolSections = [];
+        }
+    } catch (error) {
+        console.error('Error loading school sections:', error);
+        schoolSections = [];
+    }
+}
+
+function populateSchoolSectionDropdown(selectedSectionId = '') {
+    const sectionSelect = document.getElementById('schoolSectionSelect');
+    let html = '<option value="">Select School Section</option>';
+    
+    schoolSections.forEach(section => {
+        const isSelected = section.sectionId === selectedSectionId ? 'selected' : '';
+        html += `<option value="${section.sectionId}" ${isSelected}>${section.sectionName || section.sectionId}</option>`;
+    });
+    
+    sectionSelect.innerHTML = html;
+}
+
+async function openClassSectionModal(classSectionId = null) {
     if (!selectedYear) {
         alert('Please select an academic year first');
         return;
     }
+    
+    // Load school sections first
+    await loadSchoolSections();
     
     document.getElementById('classSectionForm').reset();
     document.getElementById('classSectionId').value = '';
@@ -672,9 +705,12 @@ function openClassSectionModal(classSectionId = null) {
             document.getElementById('classTeacher').value = cs.classTeacherEmail || '';
             document.getElementById('classRoom').value = cs.roomNumber || '';
             document.getElementById('classStudents').value = cs.studentCount || '';
+            // Populate school section dropdown with selected value
+            populateSchoolSectionDropdown(cs.schoolSectionId || '');
         }
     } else {
         document.getElementById('classSectionModalTitle').textContent = 'Add Class Section';
+        populateSchoolSectionDropdown();
     }
     
     classSectionModal.show();
@@ -694,10 +730,12 @@ async function saveClassSection() {
     const grade = document.getElementById('classGrade').value;
     const section = document.getElementById('classSection').value.trim();
     const classTeacherEmail = document.getElementById('classTeacher').value;
+    const schoolSectionId = document.getElementById('schoolSectionSelect').value;
     
     const data = {
         grade: grade,
         section: section.toUpperCase(),
+        schoolSectionId: schoolSectionId,
         classTeacherEmail: classTeacherEmail,
         roomNumber: document.getElementById('classRoom').value.trim(),
         studentCount: parseInt(document.getElementById('classStudents').value) || 0,
