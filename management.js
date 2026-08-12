@@ -25,9 +25,12 @@ let selectedYear = localStorage.getItem('selectedAcademicYear') || '';
 let allTeachers = [];
 let allSubjects = [];
 let allClassSections = [];
+let allStudents = [];
 let allMappings = [];
 let allHistory = [];
 let schoolSections = []; // School-level sections from /schools/{schoolId}.sections
+let selectedStudentIds = new Set();
+let studentVisibleFields = ['admissionNo', 'name', 'rollNo', 'sectionId', 'phone', 'archived'];
 let selectedPeriods = []; // Store selected periods for import
 let tempTimetableData = null; // Store timetable data during import
 let tempExtractedMappings = null; // Store extracted mappings for import
@@ -37,7 +40,7 @@ let currentMappingIndex = 0; // Current mapping being reviewed
 let pendingCSVData = null; // Store data for CSV download after column selection
 
 // Bootstrap modals
-let teacherModal, subjectModal, classSectionModal, mappingModal, transferModal, periodSelectionModal, csvColumnModal;
+let teacherModal, subjectModal, classSectionModal, mappingModal, studentModal, transferModal, periodSelectionModal, csvColumnModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize modals
@@ -45,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
     subjectModal = new bootstrap.Modal(document.getElementById('subjectModal'));
     classSectionModal = new bootstrap.Modal(document.getElementById('classSectionModal'));
     mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
+    studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
     transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
     periodSelectionModal = new bootstrap.Modal(document.getElementById('periodSelectionModal'));
     csvColumnModal = new bootstrap.Modal(document.getElementById('csvColumnModal'));
@@ -157,6 +161,7 @@ async function initializePage() {
     if (selectedSchool && selectedYear) {
         document.getElementById('selectionAlert').style.display = 'none';
         await loadAllData();
+        applyURLTabParams();
     }
 }
 
@@ -208,6 +213,7 @@ async function onContextChange() {
     if (selectedSchool && selectedYear) {
         document.getElementById('selectionAlert').style.display = 'none';
         await loadAllData();
+        applyURLTabParams();
     } else {
         document.getElementById('selectionAlert').style.display = 'block';
         clearAllTables();
@@ -216,14 +222,10 @@ async function onContextChange() {
 
 async function loadAllData() {
     showLoading();
-    
-    await Promise.all([
-        loadTeachers(),
-        loadSubjects(),
-        loadClassSections(),
-        loadMappings(),
-        loadHistory()
-    ]);
+
+    await Promise.all([loadTeachers(), loadSubjects()]);
+    await loadClassSections();
+    await Promise.all([loadStudents(), loadMappings(), loadHistory()]);
     
     updateStats();
     hideLoading();
@@ -241,6 +243,7 @@ function clearAllTables() {
     document.getElementById('teachersTable').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select school and year to view teachers</td></tr>';
     document.getElementById('subjectsTable').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Select school and year to view subjects</td></tr>';
     document.getElementById('classSectionsTable').innerHTML = '<tr><td colspan="9" class="text-center text-muted">Select school and year to view class sections</td></tr>';
+    document.getElementById('studentsTable').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select school and year to view students</td></tr>';
     document.getElementById('mappingsGrid').innerHTML = `
         <div class="col-12">
             <div class="empty-state">
@@ -645,6 +648,9 @@ function renderClassSections() {
             <td>${cs.roomNumber || '-'}</td>
             <td>${cs.studentCount || '-'}</td>
             <td>
+                <button class="btn btn-sm btn-outline-info btn-icon me-1" onclick="showStudentsForSection('${cs.schoolSectionId || cs.id}')" title="View Students">
+                    <i class="bi bi-person-lines-fill"></i>
+                </button>
                 <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editClassSection('${cs.id}')">
                     <i class="bi bi-pencil"></i>
                 </button>
@@ -795,6 +801,585 @@ function clearClassSectionFilters() {
     document.getElementById('filterClassGrade').value = '';
     document.getElementById('filterClassSection').value = '';
     renderClassSections();
+}
+
+function showStudentsForSection(sectionId) {
+    const studentsTab = document.querySelector('a[href="#students"]');
+    if (studentsTab) {
+        bootstrap.Tab.getOrCreateInstance(studentsTab).show();
+    }
+    document.getElementById('filterStudentSection').value = sectionId;
+    renderStudents();
+}
+
+// ============== STUDENTS ==============
+
+const studentFieldDefs = [
+    { key: 'admissionNo', label: 'Admission No' },
+    { key: 'name', label: 'Name' },
+    { key: 'rollNo', label: 'Roll No' },
+    { key: 'sectionId', label: 'Section' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'archived', label: 'Status' },
+    { key: 'id', label: 'Database ID' }
+];
+
+async function loadStudents() {
+    if (!selectedSchool) return;
+
+    selectedStudentIds.clear();
+    try {
+        const sectionIds = getKnownSectionIds();
+        if (sectionIds.length === 0) {
+            allStudents = [];
+            renderStudents();
+            updateStudentSectionOptions();
+            updateStudentFieldMenu();
+            return;
+        }
+
+        const batches = [];
+        for (let i = 0; i < sectionIds.length; i += 10) {
+            batches.push(sectionIds.slice(i, i + 10));
+        }
+
+        const students = [];
+        for (const batchIds of batches) {
+            const snapshot = await firestore.collection('students')
+                .where('sectionId', 'in', batchIds)
+                .get();
+            snapshot.docs.forEach(doc => students.push({ id: doc.id, ...doc.data() }));
+        }
+
+        const uniqueById = new Map();
+        students.forEach(student => uniqueById.set(student.id, student));
+        allStudents = Array.from(uniqueById.values());
+
+        renderStudents();
+        updateStudentSectionOptions();
+        updateStudentFieldMenu();
+    } catch (error) {
+        console.error('Error loading students:', error);
+        document.getElementById('studentsTable').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading students</td></tr>';
+    }
+}
+
+function getKnownSectionIds() {
+    const ids = new Set();
+    schoolSections.forEach(section => {
+        if (section.sectionId) ids.add(section.sectionId);
+    });
+    allClassSections.forEach(section => {
+        if (section.schoolSectionId) ids.add(section.schoolSectionId);
+        if (section.id) ids.add(section.id);
+    });
+    return Array.from(ids).filter(Boolean);
+}
+
+function getFilteredStudents() {
+    const search = document.getElementById('filterStudentSearch').value.trim().toLowerCase();
+    const sectionId = document.getElementById('filterStudentSection').value;
+    const archiveFilter = document.getElementById('filterStudentArchive').value;
+    const sortField = document.getElementById('studentSortField').value;
+    const sortDirection = document.getElementById('studentSortDirection').value;
+
+    const filtered = allStudents.filter(student => {
+        const isArchived = Boolean(student.archived);
+        if (sectionId && student.sectionId !== sectionId) return false;
+        if (archiveFilter === 'active' && isArchived) return false;
+        if (archiveFilter === 'archived' && !isArchived) return false;
+        if (search) {
+            const haystack = [
+                student.name,
+                student.admissionNo,
+                student.rollNo,
+                student.phone,
+                student.sectionId,
+                student.id
+            ].map(value => String(value || '').toLowerCase()).join(' ');
+            if (!haystack.includes(search)) return false;
+        }
+        return true;
+    });
+
+    filtered.sort((a, b) => {
+        let aVal = sortField === 'sectionId' ? getSectionLabel(a.sectionId) : a[sortField];
+        let bVal = sortField === 'sectionId' ? getSectionLabel(b.sectionId) : b[sortField];
+        if (sortField === 'rollNo') {
+            aVal = Number(aVal) || 0;
+            bVal = Number(bVal) || 0;
+        } else {
+            aVal = String(aVal || '').toLowerCase();
+            bVal = String(bVal || '').toLowerCase();
+        }
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    return filtered;
+}
+
+function renderStudents() {
+    const students = getFilteredStudents();
+    const thead = document.getElementById('studentsTableHead');
+    const tbody = document.getElementById('studentsTable');
+
+    thead.innerHTML = `
+        <th style="width: 42px;">
+            <input type="checkbox" class="form-check-input" id="selectAllStudents" onchange="toggleAllStudents(this.checked)">
+        </th>
+        ${studentVisibleFields.map(field => `<th>${getStudentFieldLabel(field)}</th>`).join('')}
+        <th>Actions</th>
+    `;
+
+    if (students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${studentVisibleFields.length + 2}" class="text-center text-muted">No students found</td></tr>`;
+        updateSelectAllStudentsState();
+        return;
+    }
+
+    tbody.innerHTML = students.map(student => `
+        <tr class="${student.archived ? 'table-light text-muted' : ''}">
+            <td>
+                <input type="checkbox" class="form-check-input student-select" value="${student.id}" ${selectedStudentIds.has(student.id) ? 'checked' : ''} onchange="toggleStudentSelection('${student.id}', this.checked)">
+            </td>
+            ${studentVisibleFields.map(field => `<td>${formatStudentField(student, field)}</td>`).join('')}
+            <td>
+                <button class="btn btn-sm btn-outline-secondary btn-icon me-1" onclick="viewStudent('${student.id}')" title="View">
+                    <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary btn-icon me-1" onclick="editStudent('${student.id}')" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm ${student.archived ? 'btn-outline-success' : 'btn-outline-warning'} btn-icon" onclick="archiveStudent('${student.id}', ${!student.archived})" title="${student.archived ? 'Unarchive' : 'Archive'}">
+                    <i class="bi ${student.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'}"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+
+    updateSelectAllStudentsState();
+}
+
+function getStudentFieldLabel(field) {
+    return studentFieldDefs.find(def => def.key === field)?.label || field;
+}
+
+function formatStudentField(student, field) {
+    if (field === 'sectionId') return escapeHtml(getSectionLabel(student.sectionId));
+    if (field === 'archived') {
+        return student.archived
+            ? '<span class="badge badge-inactive">Archived</span>'
+            : '<span class="badge badge-active">Active</span>';
+    }
+    if (field === 'id') return `<small class="text-muted" title="${escapeHtml(student.id)}">${escapeHtml(student.id.substring(0, 10))}...</small>`;
+    return escapeHtml(student[field] ?? '-');
+}
+
+function getSectionLabel(sectionId) {
+    if (!sectionId) return '-';
+    const schoolSection = schoolSections.find(section => section.sectionId === sectionId);
+    if (schoolSection) return schoolSection.sectionName ? `${schoolSection.sectionName} (${sectionId})` : sectionId;
+
+    const classSection = allClassSections.find(section => section.id === sectionId || section.schoolSectionId === sectionId);
+    if (classSection) return `Grade ${classSection.grade}-${classSection.section}`;
+
+    return sectionId;
+}
+
+function updateStudentSectionOptions() {
+    const sectionSelect = document.getElementById('filterStudentSection');
+    const modalSectionSelect = document.getElementById('studentSectionId');
+    const currentFilter = sectionSelect.value;
+    const currentModal = modalSectionSelect.value;
+
+    const options = getKnownSectionIds()
+        .map(id => ({ id, label: getSectionLabel(id) }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    const html = options.map(option => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join('');
+    sectionSelect.innerHTML = '<option value="">All Sections</option>' + html;
+    modalSectionSelect.innerHTML = '<option value="">Select Section</option>' + html;
+
+    if (options.some(option => option.id === currentFilter)) sectionSelect.value = currentFilter;
+    if (options.some(option => option.id === currentModal)) modalSectionSelect.value = currentModal;
+}
+
+function updateStudentFieldMenu() {
+    const container = document.getElementById('studentFieldMenu');
+    container.innerHTML = studentFieldDefs.map(def => `
+        <div class="form-check">
+            <input class="form-check-input student-field-check" type="checkbox" id="student_field_${def.key}" value="${def.key}" ${studentVisibleFields.includes(def.key) ? 'checked' : ''} onchange="updateStudentVisibleFields()">
+            <label class="form-check-label" for="student_field_${def.key}">${def.label}</label>
+        </div>
+    `).join('');
+}
+
+function updateStudentVisibleFields() {
+    const selected = Array.from(document.querySelectorAll('.student-field-check:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        alert('Please keep at least one field visible.');
+        updateStudentFieldMenu();
+        return;
+    }
+    studentVisibleFields = selected;
+    renderStudents();
+}
+
+function openStudentModal(studentId = null, readOnly = false) {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+
+    updateStudentSectionOptions();
+    document.getElementById('studentForm').reset();
+    document.getElementById('studentId').value = '';
+    document.getElementById('studentArchived').value = 'false';
+
+    const saveBtn = document.querySelector('#studentModal .modal-footer .btn-primary');
+    saveBtn.style.display = readOnly ? 'none' : '';
+    document.querySelectorAll('#studentForm input, #studentForm select').forEach(input => {
+        input.disabled = readOnly;
+    });
+
+    if (studentId) {
+        const student = allStudents.find(s => s.id === studentId);
+        if (!student) return;
+        document.getElementById('studentModalTitle').textContent = readOnly ? 'Student Details' : 'Edit Student';
+        document.getElementById('studentId').value = student.id;
+        document.getElementById('studentAdmissionNo').value = student.admissionNo || '';
+        document.getElementById('studentName').value = student.name || '';
+        document.getElementById('studentRollNo').value = student.rollNo ?? '';
+        document.getElementById('studentSectionId').value = student.sectionId || '';
+        document.getElementById('studentPhone').value = student.phone || '';
+        document.getElementById('studentArchived').value = String(Boolean(student.archived));
+    } else {
+        document.getElementById('studentModalTitle').textContent = 'Add Student';
+        const filterSection = document.getElementById('filterStudentSection').value;
+        if (filterSection) document.getElementById('studentSectionId').value = filterSection;
+    }
+
+    studentModal.show();
+}
+
+function viewStudent(studentId) {
+    openStudentModal(studentId, true);
+}
+
+function editStudent(studentId) {
+    openStudentModal(studentId, false);
+}
+
+async function saveStudent() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+
+    const id = document.getElementById('studentId').value;
+    const archived = document.getElementById('studentArchived').value === 'true';
+    const admissionNo = document.getElementById('studentAdmissionNo').value.trim();
+    const name = document.getElementById('studentName').value.trim().toUpperCase();
+    const sectionId = document.getElementById('studentSectionId').value;
+    const rollNoValue = document.getElementById('studentRollNo').value;
+
+    if (!admissionNo || !name || !sectionId) {
+        alert('Admission No, Name, and Section are required');
+        return;
+    }
+
+    const data = {
+        admissionNo,
+        name,
+        rollNo: rollNoValue === '' ? null : parseInt(rollNoValue, 10),
+        sectionId,
+        phone: document.getElementById('studentPhone').value.trim(),
+        archived,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email,
+        schoolId: selectedSchool
+    };
+
+    try {
+        if (id) {
+            await firestore.collection('students').doc(id).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            data.createdBy = currentUser.email;
+            await firestore.collection('students').add(data);
+        }
+        studentModal.hide();
+        await loadStudents();
+        updateStats();
+    } catch (error) {
+        console.error('Error saving student:', error);
+        alert('Error saving student: ' + error.message);
+    }
+}
+
+async function archiveStudent(studentId, shouldArchive) {
+    const label = shouldArchive ? 'archive' : 'unarchive';
+    if (!confirm(`Are you sure you want to ${label} this student?`)) return;
+
+    try {
+        await firestore.collection('students').doc(studentId).update({
+            archived: shouldArchive,
+            archivedAt: shouldArchive ? firebase.firestore.FieldValue.serverTimestamp() : null,
+            archivedBy: shouldArchive ? currentUser.email : null,
+            unarchivedAt: shouldArchive ? null : firebase.firestore.FieldValue.serverTimestamp(),
+            unarchivedBy: shouldArchive ? null : currentUser.email,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: currentUser.email
+        });
+        selectedStudentIds.delete(studentId);
+        await loadStudents();
+        updateStats();
+    } catch (error) {
+        console.error('Error archiving student:', error);
+        alert('Error updating student: ' + error.message);
+    }
+}
+
+function toggleStudentSelection(studentId, checked) {
+    if (checked) {
+        selectedStudentIds.add(studentId);
+    } else {
+        selectedStudentIds.delete(studentId);
+    }
+    updateSelectAllStudentsState();
+}
+
+function toggleAllStudents(checked) {
+    getFilteredStudents().forEach(student => {
+        if (checked) {
+            selectedStudentIds.add(student.id);
+        } else {
+            selectedStudentIds.delete(student.id);
+        }
+    });
+    renderStudents();
+}
+
+function updateSelectAllStudentsState() {
+    const selectAll = document.getElementById('selectAllStudents');
+    if (!selectAll) return;
+    const visible = getFilteredStudents();
+    const selectedVisible = visible.filter(student => selectedStudentIds.has(student.id));
+    selectAll.checked = visible.length > 0 && selectedVisible.length === visible.length;
+    selectAll.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visible.length;
+}
+
+async function bulkArchiveStudents(shouldArchive) {
+    const ids = Array.from(selectedStudentIds);
+    if (ids.length === 0) {
+        alert('Select at least one student first');
+        return;
+    }
+
+    const label = shouldArchive ? 'archive' : 'unarchive';
+    if (!confirm(`Are you sure you want to ${label} ${ids.length} selected student(s)?`)) return;
+
+    try {
+        for (const id of ids) {
+            await firestore.collection('students').doc(id).update({
+                archived: shouldArchive,
+                archivedAt: shouldArchive ? firebase.firestore.FieldValue.serverTimestamp() : null,
+                archivedBy: shouldArchive ? currentUser.email : null,
+                unarchivedAt: shouldArchive ? null : firebase.firestore.FieldValue.serverTimestamp(),
+                unarchivedBy: shouldArchive ? null : currentUser.email,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            });
+        }
+        selectedStudentIds.clear();
+        await loadStudents();
+        updateStats();
+    } catch (error) {
+        console.error('Error bulk updating students:', error);
+        alert('Error updating selected students: ' + error.message);
+    }
+}
+
+function clearStudentFilters() {
+    document.getElementById('filterStudentSearch').value = '';
+    document.getElementById('filterStudentSection').value = '';
+    document.getElementById('filterStudentArchive').value = 'active';
+    document.getElementById('studentSortField').value = 'rollNo';
+    document.getElementById('studentSortDirection').value = 'asc';
+    selectedStudentIds.clear();
+    renderStudents();
+}
+
+function downloadStudentsCSV() {
+    const students = getFilteredStudents();
+    if (students.length === 0) {
+        alert('No students to export');
+        return;
+    }
+
+    const columnDefs = studentFieldDefs.map(def => ({
+        ...def,
+        selected: studentVisibleFields.includes(def.key)
+    }));
+
+    showCSVColumnModal('Students', 'students', students, columnDefs, (student, col) => {
+        if (col === 'sectionId') return getSectionLabel(student.sectionId);
+        if (col === 'archived') return student.archived ? 'Archived' : 'Active';
+        return student[col] ?? '';
+    });
+}
+
+async function importStudentsCSV(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+
+    try {
+        const text = await file.text();
+        const rows = parseCSV(text);
+        if (rows.length < 2) {
+            alert('CSV must include a header row and at least one student row.');
+            return;
+        }
+
+        const headers = rows[0].map(header => normalizeCSVHeader(header));
+        const records = rows.slice(1)
+            .filter(row => row.some(cell => String(cell || '').trim()))
+            .map(row => {
+                const record = {};
+                headers.forEach((header, index) => {
+                    record[header] = row[index] || '';
+                });
+                return record;
+            });
+
+        if (records.length === 0) {
+            alert('No student rows found in CSV.');
+            return;
+        }
+
+        let imported = 0;
+        let updated = 0;
+        let skipped = 0;
+
+        for (const record of records) {
+            const admissionNo = String(record.admissionNo || '').trim();
+            const name = String(record.name || '').trim().toUpperCase();
+            const sectionId = String(record.sectionId || '').trim();
+
+            if (!admissionNo || !name || !sectionId) {
+                skipped++;
+                continue;
+            }
+
+            const data = {
+                admissionNo,
+                name,
+                rollNo: record.rollNo === '' || record.rollNo == null ? null : parseInt(record.rollNo, 10),
+                sectionId,
+                phone: String(record.phone || '').trim(),
+                archived: parseBoolean(record.archived),
+                schoolId: selectedSchool,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.email
+            };
+
+            const explicitId = String(record.id || '').trim();
+            const existing = explicitId ? allStudents.find(student => student.id === explicitId) : allStudents.find(student => student.admissionNo === admissionNo);
+
+            if (existing) {
+                await firestore.collection('students').doc(existing.id).update(data);
+                updated++;
+            } else {
+                data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                data.createdBy = currentUser.email;
+                if (explicitId) {
+                    await firestore.collection('students').doc(explicitId).set(data);
+                } else {
+                    await firestore.collection('students').add(data);
+                }
+                imported++;
+            }
+        }
+
+        alert(`Import complete!\n\nImported: ${imported}\nUpdated: ${updated}\nSkipped: ${skipped}`);
+        await loadStudents();
+        updateStats();
+    } catch (error) {
+        console.error('Error importing students:', error);
+        alert('Error importing students: ' + error.message);
+    }
+}
+
+function normalizeCSVHeader(header) {
+    const key = String(header || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const aliases = {
+        id: 'id',
+        databaseid: 'id',
+        studentid: 'id',
+        admissionno: 'admissionNo',
+        admissionnumber: 'admissionNo',
+        name: 'name',
+        studentname: 'name',
+        rollno: 'rollNo',
+        rollnumber: 'rollNo',
+        sectionid: 'sectionId',
+        section: 'sectionId',
+        phone: 'phone',
+        phonenumber: 'phone',
+        mobile: 'phone',
+        archived: 'archived',
+        status: 'archived'
+    };
+    return aliases[key] || key;
+}
+
+function parseBoolean(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['true', 'yes', 'y', '1', 'archived', 'inactive'].includes(normalized);
+}
+
+function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (char === '"' && inQuotes && next === '"') {
+            cell += '"';
+            i++;
+        } else if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            row.push(cell);
+            cell = '';
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+            if (char === '\r' && next === '\n') i++;
+            row.push(cell);
+            rows.push(row);
+            row = [];
+            cell = '';
+        } else {
+            cell += char;
+        }
+    }
+
+    if (cell || row.length > 0) {
+        row.push(cell);
+        rows.push(row);
+    }
+
+    return rows;
 }
 
 // ============== MAPPINGS ==============
@@ -2501,6 +3086,7 @@ function updateStats() {
     document.getElementById('statTeachers').textContent = allTeachers.filter(t => t.status === 'active').length;
     document.getElementById('statSubjects').textContent = allSubjects.filter(s => s.status === 'active').length;
     document.getElementById('statClassSections').textContent = allClassSections.length;
+    document.getElementById('statStudents').textContent = allStudents.filter(s => !s.archived).length;
     document.getElementById('statMappings').textContent = allMappings.length;
 }
 
@@ -2551,6 +3137,13 @@ function setupFilterListeners() {
     // Class section filters
     document.getElementById('filterClassGrade').addEventListener('change', renderClassSections);
     document.getElementById('filterClassSection').addEventListener('input', renderClassSections);
+
+    // Student filters
+    document.getElementById('filterStudentSearch').addEventListener('input', renderStudents);
+    document.getElementById('filterStudentSection').addEventListener('change', renderStudents);
+    document.getElementById('filterStudentArchive').addEventListener('change', renderStudents);
+    document.getElementById('studentSortField').addEventListener('change', renderStudents);
+    document.getElementById('studentSortDirection').addEventListener('change', renderStudents);
     
     // Mapping filters
     document.getElementById('filterMapTeacher').addEventListener('change', renderMappings);
@@ -2576,12 +3169,24 @@ function formatType(type) {
     return types[type] || type;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
 // ============== NAVIGATION FROM OTHER PAGES ==============
 
 // Check for passed parameters in URL
 const urlParams = new URLSearchParams(window.location.search);
 const passedSchool = urlParams.get('school');
 const passedYear = urlParams.get('year');
+const passedTab = urlParams.get('tab');
+const passedSectionId = urlParams.get('sectionId');
 
 if (passedSchool) {
     localStorage.setItem('selectedSchool', passedSchool);
@@ -2590,6 +3195,17 @@ if (passedSchool) {
 if (passedYear) {
     localStorage.setItem('selectedAcademicYear', passedYear);
     selectedYear = passedYear;
+}
+
+function applyURLTabParams() {
+    if (passedTab) {
+        const tabLink = document.querySelector(`a[href="#${passedTab}"]`);
+        if (tabLink) bootstrap.Tab.getOrCreateInstance(tabLink).show();
+    }
+    if (passedSectionId && document.getElementById('filterStudentSection')) {
+        document.getElementById('filterStudentSection').value = passedSectionId;
+        renderStudents();
+    }
 }
 
 // ============== SCHOOL STAFF MANAGEMENT ==============

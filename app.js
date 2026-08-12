@@ -31,6 +31,7 @@ let currentUser = null;
 let currentSchoolId = null;
 let editModal = null;
 let allAssignments = []; // Store all assignments for filtering/sorting
+let allAdminSections = [];
 let currentSort = { field: 'assignedAt', direction: 'desc' };
 
 // DOM elements
@@ -57,7 +58,9 @@ const elements = {
     filterAssignedBy: document.getElementById('filter-assignedby'),
     clearFilters: document.getElementById('clear-filters'),
     navSchoolSelect: document.getElementById('nav-school-select'),
-    navYearSelect: document.getElementById('nav-year-select')
+    navYearSelect: document.getElementById('nav-year-select'),
+    sectionsList: document.getElementById('sections-list'),
+    sectionsCount: document.getElementById('sections-count')
 };
 
 // Authentication state listener
@@ -152,6 +155,7 @@ async function loadNavSchools() {
         if (yearSelect) {
             yearSelect.addEventListener('change', function() {
                 localStorage.setItem('selectedAcademicYear', this.value);
+                renderSectionsList();
             });
         }
     } catch (error) {
@@ -188,25 +192,67 @@ async function loadSections() {
 
         let optionsHtml = '<option value="">Select a section</option>';
         let hasSections = false;
+        allAdminSections = [];
         
         for (const doc of snapshot.docs) {
             const schoolData = doc.data();
-            currentSchoolId = doc.id;
             const sections = schoolData.sections || [];
             
             sections.forEach(section => {
                 if (adminSectionIds.has(section.sectionId)) {
-                    optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
+                    optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}" data-school-id="${doc.id}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
+                    allAdminSections.push({
+                        sectionId: section.sectionId,
+                        sectionName: section.sectionName || section.sectionId,
+                        schoolId: doc.id,
+                        schoolName: schoolData.schoolName || doc.id
+                    });
                     hasSections = true;
                 }
             });
         }
         
+        allAdminSections.sort((a, b) => a.sectionName.localeCompare(b.sectionName));
         elements.sectionSelect.innerHTML = hasSections ? optionsHtml : '<option value="">No admin sections found</option>';
+        renderSectionsList();
     } catch (error) {
         console.error('Load sections:', error);
         elements.sectionSelect.innerHTML = '<option value="">Error loading</option>';
+        elements.sectionsList.innerHTML = '<div class="list-group-item text-danger text-center py-4">Error loading sections</div>';
     }
+}
+
+function renderSectionsList() {
+    if (!elements.sectionsList) return;
+
+    elements.sectionsCount.textContent = allAdminSections.length;
+
+    if (allAdminSections.length === 0) {
+        elements.sectionsList.innerHTML = '<div class="list-group-item text-muted text-center py-4">No admin sections found</div>';
+        return;
+    }
+
+    const selectedYear = elements.navYearSelect.value || localStorage.getItem('selectedAcademicYear') || '';
+    elements.sectionsList.innerHTML = allAdminSections.map(section => {
+        const params = new URLSearchParams({
+            tab: 'students',
+            sectionId: section.sectionId,
+            school: section.schoolId
+        });
+        if (selectedYear) params.set('year', selectedYear);
+
+        return `
+            <div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+                <div class="min-w-0">
+                    <div class="fw-semibold">${escapeHtml(section.sectionName)}</div>
+                    <small class="text-muted">${escapeHtml(section.schoolName)} &middot; ${escapeHtml(section.sectionId)}</small>
+                </div>
+                <a class="btn btn-sm btn-outline-primary flex-shrink-0" href="management.html?${params.toString()}">
+                    <i class="bi bi-person-lines-fill me-1"></i>Students
+                </a>
+            </div>
+        `;
+    }).join('');
 }
 
 // Load teacher assignments from Firestore (filtered by admin sections)
@@ -392,13 +438,14 @@ elements.assignBtn.onclick = async () => {
     try {
         const selectedOption = elements.sectionSelect.options[elements.sectionSelect.selectedIndex];
         const sectionName = selectedOption.getAttribute('data-name') || selectedOption.text;
+        const selectedSchoolId = selectedOption.getAttribute('data-school-id') || currentSchoolId;
         
         await firestore.collection('teacherAssignments').add({
             sectionId: sectionId,
             sectionName: sectionName,
             teacherEmail: teacherEmail,
             role: teacherRole,
-            schoolId: currentSchoolId,
+            schoolId: selectedSchoolId,
             assignedAt: firebase.firestore.FieldValue.serverTimestamp(),
             assignedBy: currentUser.email
         });
@@ -462,3 +509,13 @@ window.deleteAssignment = async (assignmentId) => {
         alert('Failed: ' + error.message);
     }
 };
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
