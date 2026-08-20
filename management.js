@@ -980,7 +980,7 @@ function formatStudentField(student, field) {
 function getSectionLabel(sectionId) {
     if (!sectionId) return '-';
     const schoolSection = schoolSections.find(section => section.sectionId === sectionId);
-    if (schoolSection) return schoolSection.sectionName ? `${schoolSection.sectionName} (${sectionId})` : sectionId;
+    if (schoolSection) return schoolSection.sectionName ? `${schoolSection.sectionName}` : sectionId;
 
     const classSection = allClassSections.find(section => section.id === sectionId || section.schoolSectionId === sectionId);
     if (classSection) return `Grade ${classSection.grade}-${classSection.section}`;
@@ -1219,12 +1219,17 @@ function downloadStudentsCSV() {
         return;
     }
 
+    const sectionId = document.getElementById('filterStudentSection').value;
+    const filename = sectionId
+        ? `students_${sanitizeFilenamePart(getSectionLabel(sectionId))}`
+        : 'students';
+
     const columnDefs = studentFieldDefs.map(def => ({
         ...def,
         selected: studentVisibleFields.includes(def.key)
     }));
 
-    showCSVColumnModal('Students', 'students', students, columnDefs, (student, col) => {
+    showCSVColumnModal('Students', filename, students, columnDefs, (student, col) => {
         if (col === 'sectionId') return getSectionLabel(student.sectionId);
         if (col === 'archived') return student.archived ? 'Archived' : 'Active';
         return student[col] ?? '';
@@ -3177,6 +3182,14 @@ function escapeHtml(value) {
         '"': '&quot;',
         "'": '&#39;'
     }[char]));
+}
+
+function sanitizeFilenamePart(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'section';
 }
 
 // ============== NAVIGATION FROM OTHER PAGES ==============
