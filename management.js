@@ -1272,11 +1272,27 @@ async function importStudentsCSV(event) {
         let imported = 0;
         let updated = 0;
         let skipped = 0;
+        const defaultSectionId = getStudentCSVDefaultSectionId();
 
         for (const record of records) {
             const admissionNo = String(record.admissionNo || '').trim();
             const name = String(record.name || '').trim().toUpperCase();
-            const sectionId = String(record.sectionId || '').trim();
+            const explicitId = String(record.id || '').trim();
+            let existing = null;
+
+            if (explicitId) {
+                existing = allStudents.find(student => student.id === explicitId);
+                if (!existing) {
+                    const existingDoc = await firestore.collection('students').doc(explicitId).get();
+                    if (existingDoc.exists) {
+                        existing = { id: existingDoc.id, ...existingDoc.data() };
+                    }
+                }
+            } else {
+                existing = allStudents.find(student => student.admissionNo === admissionNo);
+            }
+
+            const sectionId = String(record.sectionId || '').trim() || existing?.sectionId || defaultSectionId;
 
             if (!admissionNo || !name || !sectionId) {
                 skipped++;
@@ -1294,9 +1310,6 @@ async function importStudentsCSV(event) {
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedBy: currentUser.email
             };
-
-            const explicitId = String(record.id || '').trim();
-            const existing = explicitId ? allStudents.find(student => student.id === explicitId) : allStudents.find(student => student.admissionNo === admissionNo);
 
             if (existing) {
                 await firestore.collection('students').doc(existing.id).update(data);
@@ -1320,6 +1333,11 @@ async function importStudentsCSV(event) {
         console.error('Error importing students:', error);
         alert('Error importing students: ' + error.message);
     }
+}
+
+function getStudentCSVDefaultSectionId() {
+    const selectedFilterSection = document.getElementById('filterStudentSection')?.value || '';
+    return selectedFilterSection || passedSectionId || '';
 }
 
 function normalizeCSVHeader(header) {
