@@ -38,9 +38,10 @@ let currentMappingIndex = 0; // Current mapping being reviewed
 
 // CSV download pending data
 let pendingCSVData = null; // Store data for CSV download after column selection
+let pendingStudentCSVImport = null; // Store parsed student CSV import actions before confirmation
 
 // Bootstrap modals
-let teacherModal, subjectModal, classSectionModal, mappingModal, studentModal, transferModal, periodSelectionModal, csvColumnModal;
+let teacherModal, subjectModal, classSectionModal, mappingModal, studentModal, transferModal, periodSelectionModal, csvColumnModal, studentCsvPreviewModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize modals
@@ -52,6 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
     transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
     periodSelectionModal = new bootstrap.Modal(document.getElementById('periodSelectionModal'));
     csvColumnModal = new bootstrap.Modal(document.getElementById('csvColumnModal'));
+    studentCsvPreviewModal = new bootstrap.Modal(document.getElementById('studentCsvPreviewModal'));
 
     // Check auth state
     auth.onAuthStateChanged(async (user) => {
@@ -1269,56 +1271,124 @@ async function importStudentsCSV(event) {
             return;
         }
 
-        let imported = 0;
-        let updated = 0;
-        let skipped = 0;
-        const defaultSectionId = getStudentCSVDefaultSectionId();
+        const preview = await buildStudentCSVImportPreview(records);
+        pendingStudentCSVImport = preview;
+        renderStudentCSVImportPreview(preview);
+        studentCsvPreviewModal.show();
+    } catch (error) {
+        console.error('Error previewing student import:', error);
+        alert('Error previewing student import: ' + error.message);
+    }
+}
 
-        for (const record of records) {
-            const admissionNo = String(record.admissionNo || '').trim();
-            const name = String(record.name || '').trim().toUpperCase();
-            const explicitId = String(record.id || '').trim();
-            let existing = null;
+async function buildStudentCSVImportPreview(records) {
+    const defaultSectionId = getStudentCSVDefaultSectionId();
+    const actions = [];
 
-            if (explicitId) {
-                existing = allStudents.find(student => student.id === explicitId);
-                if (!existing) {
-                    const existingDoc = await firestore.collection('students').doc(explicitId).get();
-                    if (existingDoc.exists) {
-                        existing = { id: existingDoc.id, ...existingDoc.data() };
-                    }
+    for (const record of records) {
+        const admissionNo = String(record.admissionNo || '').trim();
+        const name = String(record.name || '').trim().toUpperCase();
+        const explicitId = String(record.id || '').trim();
+        let existing = null;
+
+        if (explicitId) {
+            existing = allStudents.find(student => student.id === explicitId);
+            if (!existing) {
+                const existingDoc = await firestore.collection('students').doc(explicitId).get();
+                if (existingDoc.exists) {
+                    existing = { id: existingDoc.id, ...existingDoc.data() };
                 }
-            } else {
-                existing = allStudents.find(student => student.admissionNo === admissionNo);
             }
+        } else {
+            existing = allStudents.find(student => student.admissionNo === admissionNo);
+        }
 
-            const sectionId = String(record.sectionId || '').trim() || existing?.sectionId || defaultSectionId;
+        const sectionId = String(record.sectionId || '').trim() || existing?.sectionId || defaultSectionId;
 
-            if (!admissionNo || !name || !sectionId) {
+        if (!admissionNo || !name || !sectionId) {
+            actions.push({
+                action: 'skip',
+                reason: getStudentCSVSkipReason(admissionNo, name, sectionId),
+                explicitId,
+                data: { admissionNo, name, sectionId, phone: String(record.phone || '').trim() },
+                existing
+            });
+            continue;
+        }
+
+        const data = {
+            admissionNo,
+            name,
+            rollNo: hasCSVField(record, 'rollNo')
+                ? (record.rollNo === '' || record.rollNo == null ? null : parseInt(record.rollNo, 10))
+                : (existing?.rollNo ?? null),
+            sectionId,
+            phone: hasCSVField(record, 'phone') ? String(record.phone || '').trim() : (existing?.phone || ''),
+            archived: hasCSVField(record, 'archived') ? parseBoolean(record.archived) : Boolean(existing?.archived),
+            schoolId: selectedSchool
+        };
+
+        const action = existing
+            ? (hasStudentCSVImportChanges(existing, data) ? 'update' : 'unchanged')
+            : 'import';
+
+        actions.push({
+            action,
+            reason: action === 'unchanged' ? 'No changes' : '',
+            explicitId,
+            data,
+            existing
+        });
+    }
+
+    return {
+        actions,
+        counts: {
+            import: actions.filter(item => item.action === 'import').length,
+            update: actions.filter(item => item.action === 'update').length,
+            unchanged: actions.filter(item => item.action === 'unchanged').length,
+            skip: actions.filter(item => item.action === 'skip').length
+        }
+    };
+}
+
+async function confirmStudentCSVImport() {
+    if (!pendingStudentCSVImport) return;
+
+    const confirmBtn = document.getElementById('confirmStudentCsvImportBtn');
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing...';
+
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+    let unchanged = 0;
+
+    try {
+        for (const item of pendingStudentCSVImport.actions) {
+            if (item.action === 'skip') {
                 skipped++;
+                continue;
+            }
+            if (item.action === 'unchanged') {
+                unchanged++;
                 continue;
             }
 
             const data = {
-                admissionNo,
-                name,
-                rollNo: record.rollNo === '' || record.rollNo == null ? null : parseInt(record.rollNo, 10),
-                sectionId,
-                phone: String(record.phone || '').trim(),
-                archived: parseBoolean(record.archived),
-                schoolId: selectedSchool,
+                ...item.data,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedBy: currentUser.email
             };
 
-            if (existing) {
-                await firestore.collection('students').doc(existing.id).update(data);
+            if (item.action === 'update') {
+                await firestore.collection('students').doc(item.existing.id).update(data);
                 updated++;
             } else {
                 data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
                 data.createdBy = currentUser.email;
-                if (explicitId) {
-                    await firestore.collection('students').doc(explicitId).set(data);
+                if (item.explicitId) {
+                    await firestore.collection('students').doc(item.explicitId).set(data);
                 } else {
                     await firestore.collection('students').add(data);
                 }
@@ -1326,18 +1396,108 @@ async function importStudentsCSV(event) {
             }
         }
 
-        alert(`Import complete!\n\nImported: ${imported}\nUpdated: ${updated}\nSkipped: ${skipped}`);
+        studentCsvPreviewModal.hide();
+        pendingStudentCSVImport = null;
+        alert(`Import complete!\n\nImported: ${imported}\nUpdated: ${updated}\nUnchanged: ${unchanged}\nSkipped: ${skipped}`);
         await loadStudents();
         updateStats();
     } catch (error) {
         console.error('Error importing students:', error);
         alert('Error importing students: ' + error.message);
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<i class="bi bi-check2-circle me-2"></i>Confirm Import';
     }
 }
 
 function getStudentCSVDefaultSectionId() {
     const selectedFilterSection = document.getElementById('filterStudentSection')?.value || '';
     return selectedFilterSection || passedSectionId || '';
+}
+
+function getStudentCSVSkipReason(admissionNo, name, sectionId) {
+    const missing = [];
+    if (!admissionNo) missing.push('Admission No');
+    if (!name) missing.push('Name');
+    if (!sectionId) missing.push('Section');
+    return `Missing ${missing.join(', ')}`;
+}
+
+function hasStudentCSVImportChanges(existing, data) {
+    return ['admissionNo', 'name', 'rollNo', 'sectionId', 'phone', 'archived', 'schoolId'].some(field => {
+        const existingValue = field === 'rollNo'
+            ? (existing[field] == null ? null : Number(existing[field]))
+            : existing[field];
+        return String(existingValue ?? '') !== String(data[field] ?? '');
+    });
+}
+
+function hasCSVField(record, field) {
+    return Object.prototype.hasOwnProperty.call(record, field);
+}
+
+function renderStudentCSVImportPreview(preview) {
+    const { import: importCount, update, unchanged, skip } = preview.counts;
+    document.getElementById('studentCsvPreviewSummary').innerHTML = `
+        <div class="row g-2 text-center">
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2">
+                    <div class="fw-bold text-success">${importCount}</div>
+                    <div class="small text-muted">New</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2">
+                    <div class="fw-bold text-primary">${update}</div>
+                    <div class="small text-muted">Updates</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2">
+                    <div class="fw-bold text-secondary">${unchanged}</div>
+                    <div class="small text-muted">Unchanged</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2">
+                    <div class="fw-bold text-warning">${skip}</div>
+                    <div class="small text-muted">Skipped</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('studentCsvPreviewTable').innerHTML = preview.actions.map(item => {
+        const badgeClass = {
+            import: 'bg-success',
+            update: 'bg-primary',
+            unchanged: 'bg-secondary',
+            skip: 'bg-warning text-dark'
+        }[item.action];
+        const oldPhone = item.existing?.phone ?? '';
+        const newPhone = item.data.phone ?? '';
+        const oldSection = item.existing?.sectionId ? getSectionLabel(item.existing.sectionId) : '-';
+        const newSection = item.data.sectionId ? getSectionLabel(item.data.sectionId) : '-';
+        const oldRollNo = item.existing?.rollNo ?? '';
+        const newRollNo = item.data.rollNo ?? '';
+        const oldStatus = item.existing ? (item.existing.archived ? 'Archived' : 'Active') : '-';
+        const newStatus = item.data.archived ? 'Archived' : 'Active';
+        return `
+            <tr>
+                <td><span class="badge ${badgeClass}">${escapeHtml(item.action)}</span></td>
+                <td>${escapeHtml(item.explicitId || item.existing?.id || '-')}</td>
+                <td>${escapeHtml(item.data.admissionNo || '-')}</td>
+                <td>${escapeHtml(item.data.name || '-')}</td>
+                <td>${escapeHtml(oldRollNo || '-')} <i class="bi bi-arrow-right mx-1 text-muted"></i> ${escapeHtml(newRollNo || '-')}</td>
+                <td>${escapeHtml(oldSection)} <i class="bi bi-arrow-right mx-1 text-muted"></i> ${escapeHtml(newSection)}</td>
+                <td>${escapeHtml(oldPhone || '-')} <i class="bi bi-arrow-right mx-1 text-muted"></i> ${escapeHtml(newPhone || '-')}</td>
+                <td>${escapeHtml(oldStatus)} <i class="bi bi-arrow-right mx-1 text-muted"></i> ${escapeHtml(newStatus)}</td>
+                <td>${escapeHtml(item.reason || '-')}</td>
+            </tr>
+        `;
+    }).join('');
+
+    document.getElementById('confirmStudentCsvImportBtn').disabled = importCount + update === 0;
 }
 
 function normalizeCSVHeader(header) {
