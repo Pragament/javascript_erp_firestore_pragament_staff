@@ -31,7 +31,7 @@ School master document.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `sectionId` | string | Stable section identifier. |
+| `sectionId` | string | Stable section identifier generated from `sectionName`, with a numeric suffix added if needed for uniqueness. |
 | `sectionName` | string | Display name. Falls back to `sectionId` when missing. |
 
 ## `teacherAssignments/{assignmentId}`

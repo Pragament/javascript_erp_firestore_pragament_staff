@@ -710,11 +710,10 @@ async function saveSchoolSection() {
         return;
     }
 
-    const sectionId = document.getElementById('schoolSectionId').value.trim().toUpperCase();
     const sectionName = document.getElementById('schoolSectionName').value.trim();
 
-    if (!sectionId || !sectionName) {
-        alert('Section ID and Section Name are required');
+    if (!sectionName) {
+        alert('Section Name is required');
         return;
     }
 
@@ -722,15 +721,16 @@ async function saveSchoolSection() {
         const schoolRef = firestore.collection('schools').doc(selectedSchool);
         const schoolDoc = await schoolRef.get();
         const currentSections = schoolDoc.exists ? (schoolDoc.data().sections || []) : [];
-        const duplicate = currentSections.some(section => {
-            return String(section.sectionId || '').toUpperCase() === sectionId;
+        const duplicateName = currentSections.some(section => {
+            return String(section.sectionName || '').trim().toLowerCase() === sectionName.toLowerCase();
         });
 
-        if (duplicate) {
-            alert('A section with this ID already exists in the selected school');
+        if (duplicateName) {
+            alert('A section with this name already exists in the selected school');
             return;
         }
 
+        const sectionId = generateSchoolSectionId(sectionName, currentSections);
         const sections = [
             ...currentSections,
             {
@@ -757,6 +757,26 @@ async function saveSchoolSection() {
         console.error('Error saving school section:', error);
         alert('Error saving school section: ' + error.message);
     }
+}
+
+function generateSchoolSectionId(sectionName, existingSections) {
+    const existingIds = new Set(existingSections.map(section => {
+        return String(section.sectionId || '').toUpperCase();
+    }));
+    const baseId = sectionName
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'SECTION';
+    let sectionId = baseId;
+    let suffix = 2;
+
+    while (existingIds.has(sectionId)) {
+        sectionId = `${baseId}-${suffix}`;
+        suffix++;
+    }
+
+    return sectionId;
 }
 
 async function openClassSectionModal(classSectionId = null) {
