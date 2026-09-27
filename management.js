@@ -41,13 +41,14 @@ let pendingCSVData = null; // Store data for CSV download after column selection
 let pendingStudentCSVImport = null; // Store parsed student CSV import actions before confirmation
 
 // Bootstrap modals
-let teacherModal, subjectModal, classSectionModal, mappingModal, studentModal, transferModal, periodSelectionModal, csvColumnModal, studentCsvPreviewModal;
+let teacherModal, subjectModal, classSectionModal, schoolSectionModal, mappingModal, studentModal, transferModal, periodSelectionModal, csvColumnModal, studentCsvPreviewModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize modals
     teacherModal = new bootstrap.Modal(document.getElementById('teacherModal'));
     subjectModal = new bootstrap.Modal(document.getElementById('subjectModal'));
     classSectionModal = new bootstrap.Modal(document.getElementById('classSectionModal'));
+    schoolSectionModal = new bootstrap.Modal(document.getElementById('schoolSectionModal'));
     mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
     studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
     transferModal = new bootstrap.Modal(document.getElementById('transferModal'));
@@ -691,6 +692,71 @@ function populateSchoolSectionDropdown(selectedSectionId = '') {
     });
     
     sectionSelect.innerHTML = html;
+}
+
+function openSchoolSectionModal() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+
+    document.getElementById('schoolSectionForm').reset();
+    schoolSectionModal.show();
+}
+
+async function saveSchoolSection() {
+    if (!selectedSchool) {
+        alert('Please select a school first');
+        return;
+    }
+
+    const sectionId = document.getElementById('schoolSectionId').value.trim().toUpperCase();
+    const sectionName = document.getElementById('schoolSectionName').value.trim();
+
+    if (!sectionId || !sectionName) {
+        alert('Section ID and Section Name are required');
+        return;
+    }
+
+    try {
+        const schoolRef = firestore.collection('schools').doc(selectedSchool);
+        const schoolDoc = await schoolRef.get();
+        const currentSections = schoolDoc.exists ? (schoolDoc.data().sections || []) : [];
+        const duplicate = currentSections.some(section => {
+            return String(section.sectionId || '').toUpperCase() === sectionId;
+        });
+
+        if (duplicate) {
+            alert('A section with this ID already exists in the selected school');
+            return;
+        }
+
+        const sections = [
+            ...currentSections,
+            {
+                sectionId,
+                sectionName
+            }
+        ].sort((a, b) => {
+            return String(a.sectionName || a.sectionId).localeCompare(String(b.sectionName || b.sectionId));
+        });
+
+        await schoolRef.update({
+            sections,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: currentUser.email
+        });
+
+        schoolSectionModal.hide();
+        await loadSchoolSections();
+        populateSchoolSectionDropdown(sectionId);
+        renderClassSections();
+        updateStudentSectionOptions();
+        alert('School section created successfully!');
+    } catch (error) {
+        console.error('Error saving school section:', error);
+        alert('Error saving school section: ' + error.message);
+    }
 }
 
 async function openClassSectionModal(classSectionId = null) {
