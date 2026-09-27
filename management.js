@@ -1324,6 +1324,21 @@ function downloadStudentsCSV() {
     });
 }
 
+function downloadStudentImportTemplateCSV() {
+    const headers = [
+        'Student ID',
+        'Admission No',
+        'Name',
+        'Roll No',
+        'Section ID',
+        'Phone',
+        'Archived'
+    ];
+    const blankRow = headers.map(() => '');
+
+    downloadCSV('student_import_template', headers, [blankRow]);
+}
+
 async function importStudentsCSV(event) {
     const file = event.target.files[0];
     event.target.value = '';
