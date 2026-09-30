@@ -163,26 +163,9 @@ async function loadNavSchools() {
     }
 }
 
-// Load sections from Firestore (filtered by admin role)
+// Load all sections from Firestore
 async function loadSections() {
     try {
-        // Get current user's admin assignments
-        const assignmentsSnapshot = await firestore.collection('teacherAssignments')
-            .where('teacherEmail', '==', currentUser.email)
-            .where('role', '==', 'admin')
-            .get();
-
-        const adminSectionIds = new Set();
-        assignmentsSnapshot.docs.forEach(doc => {
-            adminSectionIds.add(doc.data().sectionId);
-        });
-
-        if (adminSectionIds.size === 0) {
-            elements.sectionSelect.innerHTML = '<option value="">No admin sections found</option>';
-            return;
-        }
-
-        // Load schools and filter sections
         const snapshot = await firestore.collection('schools').get();
         
         if (snapshot.empty) {
@@ -199,21 +182,19 @@ async function loadSections() {
             const sections = schoolData.sections || [];
             
             sections.forEach(section => {
-                if (adminSectionIds.has(section.sectionId)) {
-                    optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}" data-school-id="${doc.id}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
-                    allAdminSections.push({
-                        sectionId: section.sectionId,
-                        sectionName: section.sectionName || section.sectionId,
-                        schoolId: doc.id,
-                        schoolName: schoolData.schoolName || doc.id
-                    });
-                    hasSections = true;
-                }
+                optionsHtml += `<option value="${section.sectionId}" data-name="${section.sectionName || section.sectionId}" data-school-id="${doc.id}">${section.sectionName || section.sectionId} (${section.sectionId})</option>`;
+                allAdminSections.push({
+                    sectionId: section.sectionId,
+                    sectionName: section.sectionName || section.sectionId,
+                    schoolId: doc.id,
+                    schoolName: schoolData.schoolName || doc.id
+                });
+                hasSections = true;
             });
         }
         
         allAdminSections.sort((a, b) => a.sectionName.localeCompare(b.sectionName));
-        elements.sectionSelect.innerHTML = hasSections ? optionsHtml : '<option value="">No admin sections found</option>';
+        elements.sectionSelect.innerHTML = hasSections ? optionsHtml : '<option value="">No sections found</option>';
         renderSectionsList();
     } catch (error) {
         console.error('Load sections:', error);
@@ -228,7 +209,7 @@ function renderSectionsList() {
     elements.sectionsCount.textContent = allAdminSections.length;
 
     if (allAdminSections.length === 0) {
-        elements.sectionsList.innerHTML = '<div class="list-group-item text-muted text-center py-4">No admin sections found</div>';
+        elements.sectionsList.innerHTML = '<div class="list-group-item text-muted text-center py-4">No sections found</div>';
         return;
     }
 
